@@ -7,12 +7,12 @@ namespace: litemaas
 # Resources to deploy
 resources:
   # Namespace
-  - namespace.yaml.local
+#  - namespace.yaml.local
   
   # Secrets (must be created/customized before deployment)
-  - postgres-secret.yaml.local
-  - backend-secret.yaml.local
-  - litellm-secret.yaml.local
+ # - postgres-secret.yaml.local
+ # - backend-secret.yaml.local
+ # - litellm-secret.yaml.local
   
   # PostgreSQL Database
   - postgres-init-configmap.yaml
@@ -24,11 +24,11 @@ resources:
   - litellm-service.yaml
   
   # Backend API
-  - backend-deployment.yaml.local
+  - backend-deployment.yaml
   - backend-service.yaml
   
   # Frontend Web Application
-  - frontend-deployment.yaml.local
+  - frontend-deployment.yaml
   - frontend-service.yaml
   
   # OpenShift Routes
