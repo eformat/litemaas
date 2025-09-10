@@ -84,9 +84,9 @@ sequenceDiagram
     NGINX (port 8080)->>Browser: Return { authUrl }
     Browser->>OpenShift: Redirect to authUrl
     User->>OpenShift: Enter credentials
-    
-    Note over OpenShift: OAuth callback configured as<br/>http://localhost:8080/api/auth/callback
-    
+
+    Note over OpenShift: OAuth callback configured as<br/>http://localhost:8081/api/auth/callback
+
     OpenShift->>Browser: Redirect to callback URL
     Browser->>NGINX (port 8080): GET /api/auth/callback?code=xxx
     NGINX (port 8080)->>Backend (port 8081): Proxy to backend
@@ -97,9 +97,9 @@ sequenceDiagram
     OpenShift->>Backend (port 8081): Return user details
     Backend (port 8081)->>Database: Create/update user
     Backend (port 8081)->>LiteLLM: Create user with Default Team
-    
+
     Note over Backend (port 8081): Uses relative redirect:<br/>/auth/callback#token=xxx
-    
+
     Backend (port 8081)->>NGINX (port 8080): 302 Redirect to /auth/callback
     NGINX (port 8080)->>Browser: 302 Redirect
     Browser->>NGINX (port 8080): GET /auth/callback
@@ -116,7 +116,7 @@ sequenceDiagram
 1. **Development Mode**:
    - Single Fastify process serves both frontend and backend
    - Direct communication, no proxy needed
-   - OAuth callback URL: `http://localhost:8080/api/auth/callback`
+   - OAuth callback URL: `http://localhost:8081/api/auth/callback`
 
 2. **Container/Production Mode**:
    - NGINX as single entry point (port 8080)
@@ -139,12 +139,12 @@ As of the latest update, LiteMaaS implements intelligent OAuth callback URL hand
 
 Register ALL possible callback URLs with your OAuth provider:
 
-| Environment | Callback URLs to Register | Notes |
-|-------------|--------------------------|--------|
-| Development (Vite) | `http://localhost:3000/api/auth/callback` | Vite dev server on port 3000 |
-| Development (Direct) | `http://localhost:8080/api/auth/callback`<br>`http://localhost:8081/api/auth/callback` | Direct backend access |
-| Container (NGINX) | `http://localhost:8080/api/auth/callback` | NGINX on port 8080 |
-| Production | `https://your-domain.com/api/auth/callback` | Through ingress/load balancer |
+| Environment          | Callback URLs to Register                                                              | Notes                         |
+| -------------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
+| Development (Vite)   | `http://localhost:3000/api/auth/callback`                                              | Vite dev server on port 3000  |
+| Development (Direct) | `http://localhost:8081/api/auth/callback`<br>`http://localhost:8081/api/auth/callback` | Direct backend access         |
+| Container (NGINX)    | `http://localhost:8081/api/auth/callback`                                              | NGINX on port 8080            |
+| Production           | `https://your-domain.com/api/auth/callback`                                            | Through ingress/load balancer |
 
 The application will automatically select the correct callback URL based on the request origin. The backend's relative redirect (`/auth/callback`) ensures the browser is redirected to the correct frontend route regardless of the deployment environment.
 
@@ -156,13 +156,13 @@ The OAuth service correctly handles OpenShift's dual-endpoint architecture:
 
 ```typescript
 // OAuth server for authentication
-const oauthServer = "https://oauth-openshift.apps.cluster.com"
+const oauthServer = 'https://oauth-openshift.apps.cluster.com';
 
 // API server for user information
-const apiServer = "https://api.cluster.com:6443"
+const apiServer = 'https://api.cluster.com:6443';
 
 // User info endpoint
-const userInfoUrl = `${apiServer}/apis/user.openshift.io/v1/users/~`
+const userInfoUrl = `${apiServer}/apis/user.openshift.io/v1/users/~`;
 ```
 
 ### 2. User Creation Flow (Updated 2025-07-30)
@@ -183,6 +183,7 @@ When a user logs in for the first time, the comprehensive default team implement
    - Create user in LiteLLM with mandatory team assignment
    - Uses team-based user existence detection
    - Assigns `teams: [DefaultTeamService.DEFAULT_TEAM_ID]`
+   - Applies configurable default values for budget and rate limits
 5. **Team Membership**:
    - Assign user to Default Team in database
    - Verify team membership for future operations
@@ -190,22 +191,25 @@ When a user logs in for the first time, the comprehensive default team implement
 #### Default Team Implementation Details
 
 **OAuthService Implementation** (Line 321):
+
 ```typescript
 // Ensure default team exists before user creation
 await this.defaultTeamService.ensureDefaultTeamExists();
 
-// User creation includes team assignment
+// User creation includes team assignment with configurable defaults
 const liteLLMUser = await this.liteLLMService.createUser({
   user_id: user.id,
   user_alias: user.username,
   user_email: user.email,
   user_role: 'internal_user',
-  max_budget: DEFAULT_USER_BUDGET,
-  tpm_limit: DEFAULT_TPM_LIMIT,
-  rpm_limit: DEFAULT_RPM_LIMIT,
+  max_budget: Number(this.fastify.config.DEFAULT_USER_MAX_BUDGET), // Configurable via env var
+  tpm_limit: Number(this.fastify.config.DEFAULT_USER_TPM_LIMIT), // Configurable via env var
+  rpm_limit: Number(this.fastify.config.DEFAULT_USER_RPM_LIMIT), // Configurable via env var
   teams: [DefaultTeamService.DEFAULT_TEAM_ID], // CRITICAL: Always assign user to default team
 });
 ```
+
+**Configuration**: The default values (`DEFAULT_USER_MAX_BUDGET`, `DEFAULT_USER_TPM_LIMIT`, `DEFAULT_USER_RPM_LIMIT`) can be customized via environment variables. See [Configuration Guide](../deployment/configuration.md#default-user-values) for details.
 
 #### Error Handling (Fully Implemented 2025-07-30)
 
@@ -219,7 +223,8 @@ const liteLLMUser = await this.liteLLMService.createUser({
 4. **LiteLLM Integration Service**: ✅ Added team-based user existence detection in bulk sync
 5. **LiteLLM Service**: ✅ Fixed mock responses to use empty models arrays
 
-**Standard Pattern**: 
+**Standard Pattern**:
+
 1. Ensure default team exists first
 2. Check user existence via team membership (not HTTP status)
 3. Create if needed with team assignment
@@ -228,6 +233,7 @@ const liteLLMUser = await this.liteLLMService.createUser({
 #### User Existence Detection Fix
 
 **Before**: Unreliable HTTP status checking
+
 ```typescript
 // ❌ Always returned HTTP 200, even for non-existent users
 const response = await this.liteLLMService.getUserInfo(userId);
@@ -235,6 +241,7 @@ const response = await this.liteLLMService.getUserInfo(userId);
 ```
 
 **After**: Team-based validation
+
 ```typescript
 // ✅ Check teams array for actual existence
 const response = await this.liteLLMService.getUserInfo(userId);
@@ -271,26 +278,27 @@ const MOCK_USERS = [
     id: 'admin-001',
     username: 'admin@example.com',
     fullName: 'System Administrator',
-    roles: ['admin', 'user']
+    roles: ['admin', 'user'],
   },
   {
     id: 'user-001',
     username: 'user@example.com',
     fullName: 'Regular User',
-    roles: ['user']
+    roles: ['user'],
   },
   {
     id: 'readonly-001',
     username: 'readonly@example.com',
     fullName: 'Read Only User',
-    roles: ['readonly']
-  }
-]
+    roles: ['readonly'],
+  },
+];
 ```
 
 ### Enabling Mock Mode
 
 Set environment variable:
+
 ```env
 OAUTH_MOCK_ENABLED=true
 ```
@@ -302,7 +310,7 @@ OAUTH_MOCK_ENABLED=true
 3. **Secure Storage**: Tokens stored securely in frontend
 4. **HTTPS Required**: Production must use HTTPS for all endpoints
 5. **Audit Logging**: All authentication events are logged
-6. **Token Age for Sensitive Operations**: 
+6. **Token Age for Sensitive Operations**:
    - Currently set to 24 hours for API key retrieval operations
    - **TODO**: This is temporarily relaxed from 5 minutes for better UX
    - Consider implementing a more granular approach based on operation sensitivity
@@ -317,7 +325,7 @@ OAUTH_MOCK_ENABLED=true
 OAUTH_CLIENT_ID=litemaas
 OAUTH_CLIENT_SECRET=your-secret-here
 OAUTH_ISSUER=https://oauth-openshift.apps.cluster.com
-OAUTH_CALLBACK_URL=http://localhost:8080/api/auth/callback
+OAUTH_CALLBACK_URL=http://localhost:8081/api/auth/callback
 
 # Development
 OAUTH_MOCK_ENABLED=true  # Set to false for production
@@ -338,10 +346,10 @@ metadata:
   name: litemaas
 secret: your-secret-here
 redirectURIs:
-- http://localhost:3000/api/auth/callback      # Development (Vite)
-- http://localhost:8080/api/auth/callback      # Development (Direct) / Container
-- http://localhost:8081/api/auth/callback      # Backend Direct Access
-- https://your-domain/api/auth/callback        # Production
+  - http://localhost:3000/api/auth/callback # Development (Vite)
+  - http://localhost:8081/api/auth/callback # Development (Direct) / Container
+  - http://localhost:8081/api/auth/callback # Backend Direct Access
+  - https://your-domain/api/auth/callback # Production
 grantMethod: prompt
 ```
 
@@ -352,6 +360,7 @@ The application will automatically select the appropriate callback URL based on 
 ### Auth Context
 
 The frontend AuthContext handles:
+
 - Login initiation
 - Token storage
 - User state management
@@ -360,6 +369,7 @@ The frontend AuthContext handles:
 ### Auth Service
 
 Updated to use correct endpoints:
+
 - `/api/auth/login` for OAuth initiation
 - `/api/auth/logout` for logout
 - `/api/v1/auth/me` for user information
@@ -369,6 +379,7 @@ Updated to use correct endpoints:
 ### Manual Testing
 
 1. **Mock OAuth Flow**:
+
    ```bash
    # Set OAUTH_MOCK_ENABLED=true
    # Click login, select mock user

@@ -5,14 +5,19 @@ import {
   KeyIcon,
   ChartLineIcon,
   CogIcon,
+  CommentsIcon,
+  UsersIcon,
 } from '@patternfly/react-icons';
 
 import HomePage from '../pages/HomePage';
 import ModelsPage from '../pages/ModelsPage';
 import SubscriptionsPage from '../pages/SubscriptionsPage';
 import ApiKeysPage from '../pages/ApiKeysPage';
+import ChatbotPage from '../pages/ChatbotPage';
 import UsagePage from '../pages/UsagePage';
-import SettingsPage from '../pages/SettingsPage';
+import ToolsPage from '../pages/ToolsPage';
+import AdminModelsPage from '../pages/AdminModelsPage';
+import UsersPage from '../pages/UsersPage';
 
 import { AppConfig } from '../types/navigation';
 
@@ -53,6 +58,13 @@ export const appConfig: AppConfig = {
           icon: KeyIcon,
         },
         {
+          id: 'chatbot',
+          path: '/chatbot',
+          element: ChatbotPage,
+          label: 'nav.chatbot',
+          icon: CommentsIcon,
+        },
+        {
           id: 'usage',
           path: '/usage',
           element: UsagePage,
@@ -62,11 +74,34 @@ export const appConfig: AppConfig = {
       ],
     },
     {
-      id: 'settings',
-      path: '/settings',
-      element: SettingsPage,
-      label: 'nav.settings',
-      icon: CogIcon,
+      id: 'admin',
+      label: 'Admin',
+      routes: [
+        {
+          id: 'admin-models',
+          path: '/admin/models',
+          element: AdminModelsPage,
+          label: 'nav.admin.models',
+          icon: CubesIcon,
+          requiredRoles: ['admin', 'admin-readonly'],
+        },
+        {
+          id: 'admin-users',
+          path: '/admin/users',
+          element: UsersPage,
+          label: 'nav.admin.users',
+          icon: UsersIcon,
+          requiredRoles: ['admin', 'admin-readonly'],
+        },
+        {
+          id: 'tools',
+          path: '/admin/tools',
+          element: ToolsPage,
+          label: 'nav.admin.tools',
+          icon: CogIcon,
+          requiredRoles: ['admin', 'admin-readonly'],
+        },
+      ],
     },
   ],
   navigation: [
@@ -95,17 +130,44 @@ export const appConfig: AppConfig = {
       icon: KeyIcon,
     },
     {
+      id: 'chatbot',
+      label: 'nav.chatbot',
+      path: '/chatbot',
+      icon: CommentsIcon,
+    },
+    {
       id: 'usage',
       label: 'nav.usage',
       path: '/usage',
       icon: ChartLineIcon,
     },
-    // Settings menu item hidden for now - uncomment when needed
-    // {
-    //   id: 'settings',
-    //   label: 'nav.settings',
-    //   path: '/settings',
-    //   icon: CogIcon,
-    // },
+    // Admin separator
+    {
+      id: 'admin-separator',
+      label: '',
+      isGroup: true,
+      requiredRoles: ['admin', 'admin-readonly'],
+    },
+    {
+      id: 'admin-models',
+      label: 'nav.admin.models',
+      path: '/admin/models',
+      icon: CubesIcon,
+      requiredRoles: ['admin', 'admin-readonly'],
+    },
+    {
+      id: 'admin-users',
+      label: 'nav.admin.users',
+      path: '/admin/users',
+      icon: UsersIcon,
+      requiredRoles: ['admin', 'admin-readonly'],
+    },
+    {
+      id: 'tools',
+      label: 'nav.admin.tools',
+      path: '/admin/tools',
+      icon: CogIcon,
+      requiredRoles: ['admin', 'admin-readonly'],
+    },
   ],
 };

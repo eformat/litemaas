@@ -1,12 +1,6 @@
 import { FastifyInstance } from 'fastify';
-import {
-  LiteLLMModel,
-  LiteLLMHealth,
-  LiteLLMError,
-  LiteLLMConfig,
-  ChatCompletionRequest,
-  ChatCompletionResponse,
-} from '../types/model.types.js';
+import { BaseService } from './base.service.js';
+import { LiteLLMModel, LiteLLMHealth, LiteLLMError, LiteLLMConfig } from '../types/model.types.js';
 import {
   LiteLLMKeyGenerationRequest,
   LiteLLMKeyGenerationResponse,
@@ -20,9 +14,8 @@ import {
   LiteLLMTeamResponse,
 } from '../types/user.types.js';
 
-export class LiteLLMService {
+export class LiteLLMService extends BaseService {
   private config: LiteLLMConfig;
-  private fastify: FastifyInstance;
   private cache: Map<string, { data: any; timestamp: number; ttl: number }> = new Map();
   private readonly DEFAULT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
   private isCircuitBreakerOpen = false;
@@ -99,7 +92,7 @@ export class LiteLLMService {
   ];
 
   constructor(fastify: FastifyInstance, config?: Partial<LiteLLMConfig>) {
-    this.fastify = fastify;
+    super(fastify);
     this.config = {
       baseUrl:
         config?.baseUrl ||
@@ -204,7 +197,7 @@ export class LiteLLMService {
   private async makeRequest<T>(
     endpoint: string,
     options: {
-      method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+      method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
       body?: any;
       headers?: Record<string, string>;
     } = {},
@@ -295,11 +288,6 @@ export class LiteLLMService {
 
     this.recordFailure();
     throw lastError!;
-  }
-
-  private createMockResponse<T>(data: T): Promise<T> {
-    const delay = Math.random() * 100 + 50; // 50-150ms
-    return new Promise((resolve) => setTimeout(() => resolve(data), delay));
   }
 
   // Enhanced Model Management
@@ -977,48 +965,6 @@ export class LiteLLMService {
     }
   }
 
-  // LLM Operations
-  async chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
-    if (this.config.enableMocking) {
-      const mockResponse: ChatCompletionResponse = {
-        id: `chatcmpl-mock-${Math.random().toString(36).substring(2, 15)}`,
-        object: 'chat.completion',
-        created: Math.floor(Date.now() / 1000),
-        model: request.model,
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: `This is a mock response for model ${request.model}. Your message was: "${request.messages[request.messages.length - 1]?.content}"`,
-            },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: {
-          prompt_tokens: request.messages.reduce((sum, msg) => sum + msg.content.length / 4, 0),
-          completion_tokens: 50,
-          total_tokens: 0,
-        },
-      };
-
-      mockResponse.usage.total_tokens =
-        mockResponse.usage.prompt_tokens + mockResponse.usage.completion_tokens;
-
-      return this.createMockResponse(mockResponse);
-    }
-
-    try {
-      return await this.makeRequest<ChatCompletionResponse>('/chat/completions', {
-        method: 'POST',
-        body: request,
-      });
-    } catch (error) {
-      this.fastify.log.error(error, 'Failed to create chat completion');
-      throw error;
-    }
-  }
-
   async validateApiKey(apiKey: string): Promise<boolean> {
     if (this.config.enableMocking) {
       return apiKey.startsWith('sk-litellm-') || apiKey === 'test-key';
@@ -1205,6 +1151,59 @@ export class LiteLLMService {
         timeout: this.config.timeout,
       },
     };
+  }
+
+  async createModel(modelData: any): Promise<any> {
+    const url = '/model/new';
+
+    try {
+      this.fastify.log.info({ modelData }, 'Creating model in LiteLLM');
+      const response = await this.makeRequest<any>(url, {
+        method: 'POST',
+        body: modelData,
+      });
+
+      this.fastify.log.info({ modelName: modelData.model_name }, 'Model created successfully');
+      return response;
+    } catch (error) {
+      this.fastify.log.error({ error, modelData }, 'Failed to create model');
+      throw error;
+    }
+  }
+
+  async updateModel(modelId: string, modelData: any): Promise<any> {
+    const url = `/model/${modelId}/update`;
+
+    try {
+      this.fastify.log.info({ modelId, modelData }, 'Updating model in LiteLLM');
+      const response = await this.makeRequest<any>(url, {
+        method: 'PATCH',
+        body: modelData,
+      });
+
+      this.fastify.log.info({ modelId }, 'Model updated successfully');
+      return response;
+    } catch (error) {
+      this.fastify.log.error({ error, modelId, modelData }, 'Failed to update model');
+      throw error;
+    }
+  }
+
+  async deleteModel(modelId: string): Promise<void> {
+    const url = `/model/delete`;
+
+    try {
+      this.fastify.log.info({ modelId }, 'Deleting model from LiteLLM');
+      await this.makeRequest<void>(url, {
+        method: 'POST',
+        body: { id: modelId },
+      });
+
+      this.fastify.log.info({ modelId }, 'Model deleted successfully');
+    } catch (error) {
+      this.fastify.log.error({ error, modelId }, 'Failed to delete model');
+      throw error;
+    }
   }
 
   async clearCache(pattern?: string): Promise<void> {

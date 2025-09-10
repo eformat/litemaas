@@ -1,10 +1,10 @@
 # CLAUDE.md - LiteMaaS AI Context File
 
-> **Note for AI Assistants**: This is a condensed context file for AI-powered development tools. For comprehensive documentation, see:
-> - **API Documentation**: `docs/api/`
-> - **Architecture**: `docs/architecture/`
-> - **Development**: `docs/development/`
-> - **Deployment**: `docs/deployment/`
+> **Note for AI Assistants**: This is the root context file providing project overview. For detailed implementation context:
+>
+> - **Backend Context**: [`backend/CLAUDE.md`](backend/CLAUDE.md) - Fastify API implementation details
+> - **Frontend Context**: [`frontend/CLAUDE.md`](frontend/CLAUDE.md) - React/PatternFly 6 implementation details
+> - **Documentation**: See `docs/` for comprehensive guides
 
 ## 🚀 Project Overview
 
@@ -13,14 +13,17 @@
 ## 🏗️ Architecture Overview
 
 **Monorepo** with two packages:
+
 - **Backend** (`@litemaas/backend`): Fastify API server
 - **Frontend** (`@litemaas/frontend`): React + PatternFly 6 UI
 
 ### Tech Stack Summary
-- **Backend**: Fastify, TypeScript, PostgreSQL, OAuth2/JWT, LiteLLM integration
+
+- **Backend**: Fastify, TypeScript, PostgreSQL, OAuth2/JWT, RBAC, LiteLLM integration
 - **Frontend**: React, TypeScript, Vite, PatternFly 6, React Router, React Query
+- **Security**: Role-based access control with three-tier hierarchy (admin > adminReadonly > user)
 - **Testing**: Vitest, Playwright, K6
-- **i18n**: EN, ES, FR
+- **i18n**: EN, ES, FR, DE, IT, JA, KO, ZH, ELV (9 languages)
 
 ## 📁 Project Structure
 
@@ -34,9 +37,9 @@ litemaas/
 │   │   ├── plugins/           # Fastify plugins (auth, db, swagger, etc.)
 │   │   ├── routes/            # API endpoints (/auth, /users, /models, etc.)
 │   │   ├── schemas/           # TypeBox validation schemas
-│   │   ├── services/          # Business logic layer
+│   │   ├── services/          # Business logic layer (with BaseService)
 │   │   ├── types/             # TypeScript type definitions
-│   │   ├── utils/             # Utility functions
+│   │   ├── utils/             # Utility functions (validation, sync)
 │   │   ├── app.ts            # Main Fastify application setup
 │   │   └── index.ts          # Application entry point
 │   ├── tests/
@@ -54,9 +57,9 @@ litemaas/
 │   │   ├── contexts/         # React Context providers
 │   │   ├── hooks/            # Custom React hooks
 │   │   ├── i18n/             # Internationalization setup
-│   │   ├── pages/            # Page-level components
+│   │   ├── pages/            # Page-level components (including ChatbotPage)
 │   │   ├── routes/           # Routing configuration
-│   │   ├── services/         # API service layer (Axios-based)
+│   │   ├── services/         # API service layer (Axios-based, chat, prompts)
 │   │   ├── types/            # TypeScript interfaces
 │   │   └── utils/            # Utility functions
 │   ├── public/              # Static public assets
@@ -67,168 +70,198 @@ litemaas/
 
 ## 🔧 Key Features
 
-### Backend
-- Fastify plugin architecture (auth, db, rate limiting, RBAC, swagger)
+### Role-Based Access Control (RBAC)
+
+**Three-Tier Hierarchy**: `admin > adminReadonly > user`
+
+- **OpenShift Integration**: Automatic role assignment from OpenShift groups
+- **Multi-Role Support**: Users can have multiple roles; most powerful determines access
+- **Frontend Role Display**: User's most powerful role shown in navigation with translations
+- **Admin Features**: Dedicated admin pages for user management and system operations
+- **Audit Trail**: All admin actions logged for compliance and security
+
+### Backend (`@litemaas/backend`)
+
+- Fastify plugin architecture with PostgreSQL
 - OAuth2 + JWT authentication with API key support
-- PostgreSQL database with migration system
+- **Role-based access control (RBAC)** with OpenShift group mapping
+- **Administrative endpoints** for user and system management
 - LiteLLM integration for model synchronization
-- Budget management and usage tracking
-- Team collaboration features with Default Team implementation
+- Multi-model API key support with budget management
+- Team collaboration with Default Team pattern
 
-### Database Tables
-`users`, `teams`, `models`, `subscriptions`, `api_keys`, `api_key_models`, `usage_logs`, `audit_logs`
+_See [`backend/CLAUDE.md`](backend/CLAUDE.md) for implementation details_
 
-> Added `api_key_models` junction table for multi-model API key support
-> Added Default Team (`a0000000-0000-4000-8000-000000000001`) for reliable user existence detection
+### Frontend (`@litemaas/frontend`)
 
-### API Routes Structure
-- **OAuth Flow** (`/api/auth/*`): login, callback, logout - unversioned for provider compatibility
-- **User Profile** (`/api/v1/auth/*`): me, profile - versioned API endpoints
-- **Business API** (`/api/v1/*`): models, subscriptions, api-keys, teams, usage - all versioned
+- React 18 with TypeScript and Vite
+- PatternFly 6 component library (`pf-v6-` prefix required)
+- **Role-based UI rendering** with conditional admin features
+- **User role display** in navigation sidebar with translation support
+- React Query for server state management
+- AI Chatbot integration with conversation management
+- Internationalization (9 languages supported)
+- Responsive design with dark theme support
+- WCAG 2.1 AA accessibility compliance
 
-*See `docs/api/rest-api.md` for complete endpoint documentation*
-
-## 🎨 Frontend
-- React Context API for state (Auth, Notifications)
-- React Query for server state management with intelligent caching
-- Axios service layer with JWT interceptors
-- PatternFly 6 components (`pf-v6-` prefix required)
-- Main routes: `/home`, `/models`, `/subscriptions`, `/api-keys`, `/usage`, `/settings`
-
-## 🎯 PatternFly 6 Integration
-
-⚠️ **CRITICAL**: PatternFly 6 requires `pf-v6-` prefix for all classes. See [PATTERNFLY6_RULES.md](./PATTERNFLY6_RULES.md).
+_See [`frontend/CLAUDE.md`](frontend/CLAUDE.md) for implementation details_
 
 ## 🚀 Quick Start
 
 **Development:**
+
 ```bash
 npm install        # Install dependencies
-npm run dev        # Start both backend and frontend
+npm run dev        # Start both backend and frontend with auto-reload
 ```
 
+> **Note**: In development, both backend and frontend servers run with auto-reload enabled. Any code changes are automatically detected and applied without needing to restart the servers.
+
 **Production (OpenShift):**
+
 ```bash
 oc apply -k deployment/openshift/  # Deploy to OpenShift/Kubernetes
 ```
 
 **Development (Container):**
+
 ```bash
-docker-compose up -d  # Local development with containers
+docker compose up -d  # Local development with containers (using compose.yaml)
 ```
 
-*See `docs/development/` for detailed setup and `docs/deployment/configuration.md` for environment variables*
+_See `docs/development/` for detailed setup and `docs/deployment/configuration.md` for environment variables_
+
+## 🚨 CRITICAL DEVELOPMENT NOTES
+
+### Bash Tool Limitation
+
+**⚠️ CRITICAL**: stderr redirects are broken in the Bash tool - you can't use `2>&1` in bash commands. The Bash tool will mangle the stderr redirect and pass a "2" as an arg, and you won't see stderr.
+
+**Workaround**: Use the wrapper script: `./dev-tools/run_with_stderr.sh command args` to capture both stdout and stderr.
+
+See <https://github.com/anthropics/claude-code/issues/4711> for details.
 
 ## 🔒 Security & Performance
 
+### Authentication & Authorization
+
 - **Auth**: OAuth2 (OpenShift) + JWT + API keys + Development mock mode
-- **Security**: Rate limiting, CORS, CSP, encrypted storage
-- **Performance**: <200ms API response, <3s frontend load
-- **i18n**: EN, ES, FR via react-i18next
-- **CI/CD**: GitHub Actions, 80%+ coverage requirement
+- **RBAC**: Three-tier role hierarchy with OpenShift group mapping:
+  ```
+  admin > adminReadonly > user
+  ```
+- **Role Assignment**: Automatic from OpenShift groups (`litemaas-admins`, `litemaas-readonly`, `litemaas-users`)
+- **Multi-Role Support**: Users can have multiple roles; most powerful determines permissions
+- **Resource Protection**: Role-based data access with admin oversight capabilities
 
-## 🔗 LiteLLM Integration
+### Security Features
 
-- **Model Sync**: Auto-sync from LiteLLM `/model/info` endpoint on startup
-- **Budget Management**: User/team/subscription-level budgets with alerts
-- **Rate Limiting**: TPM/RPM limits with burst capacity
-- **Data Handling**: Graceful handling of missing data (returns `undefined`, UI shows "N/A")
-- **Circuit Breaker**: Resilient API communication with mock data fallback
-- **User Management**: Standardized user existence checking and creation across all services
-- **Error Handling**: Graceful handling of "already exists" errors in user creation flows
+- **API Endpoint Protection**: Role-based access control on all admin endpoints
+- **Data Isolation**: Users can only access own resources; admins can access all
+- **Audit Logging**: All admin actions and role changes logged
+- **Rate Limiting**: Role-specific rate limits (higher for admins)
+- **Security Headers**: CORS, CSP, encrypted storage
 
-*See `docs/architecture/litellm-integration.md` for details*
+### Performance Targets
 
-## 📝 Key Implementation Notes
+- **API Response**: <200ms (standard), <300ms (admin endpoints)
+- **Frontend Load**: <3s initial, <1s role-based navigation updates
+- **Testing**: Vitest, Playwright, K6 with 80%+ coverage requirement
+- **CI/CD**: GitHub Actions for automated testing and deployment
 
-### Default Team Implementation
-- **Purpose**: Ensures all users belong to at least one team for proper LiteLLM integration
-- **Default Team UUID**: `a0000000-0000-4000-8000-000000000001`
-- **Key Feature**: Empty `allowed_models: []` array enables access to all models
-- **Usage**: Automatically assigned to all new users during creation
+## 🔗 Core Integration Points
 
-### Multi-Model API Keys
-> API keys now support multi-model access instead of single subscription binding
+### LiteLLM Integration
 
-- **Architecture**: Many-to-many relationship between API keys and models via `api_key_models` junction table
-- **Backward Compatibility**: Legacy subscription-based keys still work with deprecation warnings
-- **Enhanced Features**: Budget limits, rate limiting, team support, metadata, and expiration per key
-- **Migration Strategy**: Gradual transition with full compatibility maintained
+- Auto-sync models from LiteLLM `/model/info` endpoint
+- Multi-model API key support with budget management
+- Circuit breaker pattern for resilient communication
+- Graceful fallback to mock data in development
 
-### Subscription Management
-- Browse models → Select → Subscribe (creates "active" status immediately)
-- Self-service model: No approval workflow required
-- Default quotas: 10K requests/month, 1M tokens/month
-- Unique constraint: One subscription per user-model pair
+### Authentication Flows
 
-### Model Data Mapping
-```typescript
-// LiteLLM → Database
-model_name → id, name
-litellm_params.custom_llm_provider → provider
-model_info.max_tokens → context_length
-model_info.input/output_cost_per_token → pricing
-```
+- **Production**: OAuth2 with OpenShift provider + role assignment from groups
+- **Development**: Mock auth mode with configurable test user roles
+- **API Keys**: LiteLLM-compatible key generation with user role inheritance
 
-### API Key Management
+### Role-Based Features
 
-#### Key Alias Uniqueness
-- **Format**: `${userChosenName}_${8charUUID}` (e.g., `production-key_a5f2b1c3`)
-- **Purpose**: Ensures global uniqueness for LiteLLM while preserving user-friendly names
+#### Admin Capabilities (`admin` role)
 
-### API Key Structure
-```typescript
-// Multi-model API key creation with proper LiteLLM format
-{
-  "modelIds": ["gpt-4", "gpt-3.5-turbo"],  // Multiple models per key
-  "maxBudget": 500.00,                     // Per-key budget limits
-  "tpmLimit": 2000,                        // Rate limiting
-  "permissions": {...},                    // Fine-grained permissions
-  "metadata": {...}                        // Custom metadata
-}
+- **User Management**: Create, update, deactivate users and assign roles
+- **System Operations**: Model synchronization, global sync operations
+- **Data Access**: View and modify all user resources
+- **System Monitoring**: Access to system status, metrics, and health checks
 
-// Response includes actual LiteLLM key
-{
-  "id": "key_123",
-  "key": "sk-litellm-abcdef1234567890",    // Returns actual LiteLLM key
-  "keyPrefix": "sk-litellm",               // Correct LiteLLM prefix  
-  "isLiteLLMKey": true,                    // Indicates LiteLLM compatibility
-  "models": ["gpt-4", "gpt-3.5-turbo"]
-}
+#### Read-Only Admin (`adminReadonly` role)
 
-// LEGACY: Single subscription (still supported)
-{
-  "subscriptionId": "sub_123"              // Deprecated with warnings
-}
-```
+- **System Visibility**: View all users, data, and system information
+- **Monitoring Access**: System status, metrics, audit logs
+- **No Modifications**: Cannot create, update, or delete resources
+- **Reporting**: Access to usage analytics and system reports
 
+#### Standard User (`user` role)
+
+- **Personal Resources**: Manage own subscriptions, API keys, usage data
+- **Self-Service**: Update profile, preferences, and settings
+- **Model Access**: Subscribe to and use available AI models
+- **Limited Scope**: Cannot view other users or system information
+
+_For detailed implementation, see workspace-specific CLAUDE.md files_
 
 ## 📚 Documentation Structure
+
+### AI Context Files (Start Here)
+
+- **[`./CLAUDE.md`](CLAUDE.md)** - This file, project overview
+- **[`backend/CLAUDE.md`](backend/CLAUDE.md)** - Backend implementation context
+- **[`frontend/CLAUDE.md`](frontend/CLAUDE.md)** - Frontend implementation context
+
+### Comprehensive Documentation
 
 ```
 docs/
 ├── api/                    # API endpoints, schemas, examples
 ├── architecture/           # System design, services, integration
-├── deployment/            # Configuration, environment setup, container deployment
+├── deployment/            # Configuration, environment, containers
 ├── development/           # Setup guide, testing, conventions
+│   ├── accessibility/     # WCAG 2.1 AA compliance and testing
+│   └── pf6-guide/        # PatternFly 6 authoritative guide
 └── features/              # Feature-specific documentation
 ```
 
-### Key Documentation Files
-- `docs/api/rest-api.md` - Complete API reference with multi-model support
-- `docs/api/api-migration-guide.md` - Multi-model API migration guide
-- `docs/architecture/database-schema.md` - Database schema with multi-model tables
-- `docs/features/multi-model-api-keys-implementation.md` - Implementation details
-- `docs/features/default-team-implementation.md` - Default Team implementation and user existence detection
-- `docs/features/authentication-flow.md` - OAuth flow and user creation with error handling fixes
-- `docs/api/subscriptions-api.md` - Subscription endpoints
-- `docs/api/model-sync-api.md` - Model synchronization
-- `docs/architecture/services.md` - Service layer details with standardized error handling patterns
-- `docs/deployment/configuration.md` - Environment variables
-- `docs/deployment/containers.md` - Container deployment guide with Docker/Podman
-- `docs/development/README.md` - Development setup
-- `PATTERNFLY6_RULES.md` - PatternFly 6 migration rules
+### Quick References
+
+- **User Roles Guide**: `docs/features/user-roles-administration.md` - **RBAC system authority**
+- **Authentication Setup**: `docs/deployment/authentication.md` - **OAuth & role configuration**
+- **PatternFly 6**: `docs/development/pf6-guide/` - UI development authority
+- **Accessibility Guide**: `docs/development/accessibility/` - WCAG 2.1 AA compliance
+- **API Reference**: `docs/api/rest-api.md` - Complete endpoint documentation with role requirements
+- **Database Schema**: `docs/architecture/database-schema.md` - Table structures
+- **Environment Config**: `docs/deployment/configuration.md` - All env variables
+- **Development Setup**: `docs/development/setup.md` - Getting started with admin user setup
+- **Chatbot Implementation**: `docs/development/chatbot-implementation.md` - AI chat features
+
+## 🎯 For AI Assistants
+
+When working on:
+
+- **Backend tasks** → Load `backend/CLAUDE.md` for Fastify/service details
+- **Frontend tasks** → Load `frontend/CLAUDE.md` for React/PatternFly details
+- **Role/Admin tasks** → Load `docs/features/user-roles-administration.md` for RBAC details
+- **Authentication tasks** → Load `docs/deployment/authentication.md` for OAuth/role setup
+- **Full-stack tasks** → Start with this file, then load specific contexts as needed
+
+### Security Note for AI Assistants
+
+⚠️ **Role-Based Development**: When implementing features that involve user roles or administrative functions:
+
+1. **Always implement backend validation first** - Frontend role checks are UX only
+2. **Use role hierarchy** - Check for most powerful role when multiple roles exist
+3. **Follow data access patterns** - Users see own data, admins see all data
+4. **Test with different roles** - Verify access control with user, adminReadonly, and admin accounts
+5. **Document role requirements** - Clearly specify which roles can access new endpoints/features
 
 ---
 
-*This is an AI context file. For human-readable documentation, see the `docs/` directory.*
+_This is an AI context file optimized for development assistance. For comprehensive documentation, see the `docs/` directory._

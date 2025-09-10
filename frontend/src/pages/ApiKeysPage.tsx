@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   PageSection,
@@ -38,6 +38,8 @@ import {
   Label,
   LabelGroup,
   Divider,
+  HelperText,
+  HelperTextItem,
 } from '@patternfly/react-core';
 import {
   KeyIcon,
@@ -48,6 +50,7 @@ import {
   TrashIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
+  PencilAltIcon,
 } from '@patternfly/react-icons';
 import { Table, Thead, Tbody, Tr, Th, Td } from '@patternfly/react-table';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -72,11 +75,25 @@ const ApiKeysPage: React.FC = () => {
   const [newKeyRateLimit, setNewKeyRateLimit] = useState('1000');
   const [newKeyExpiration, setNewKeyExpiration] = useState('never');
   const [creatingKey, setCreatingKey] = useState(false);
+  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const [generatedKey, setGeneratedKey] = useState<ApiKey | null>(null);
   const [showGeneratedKey, setShowGeneratedKey] = useState(false);
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const [keyToDelete, setKeyToDelete] = useState<ApiKey | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  // Edit modal state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingKey, setEditingKey] = useState<ApiKey | null>(null);
+  const [updatingKey, setUpdatingKey] = useState(false);
+
+  // Modal focus management refs
+  const createModalTriggerRef = useRef<HTMLElement | null>(null);
+  const createModalPrimaryButtonRef = useRef<HTMLButtonElement>(null);
+  const viewModalTriggerRef = useRef<HTMLElement | null>(null);
+  const generatedModalPrimaryButtonRef = useRef<HTMLButtonElement>(null);
+  const deleteModalTriggerRef = useRef<HTMLElement | null>(null);
+  const deleteModalCancelButtonRef = useRef<HTMLButtonElement>(null);
 
   // ✅ Multi-model support state
   const [models, setModels] = useState<Model[]>([]);
@@ -200,6 +217,168 @@ const ApiKeysPage: React.FC = () => {
     }
   }, [apiKeys, selectedApiKey]);
 
+  // Focus management for create modal
+  useEffect(() => {
+    if (!isCreateModalOpen) {
+      return;
+    }
+    if (isCreateModalOpen) {
+      setTimeout(() => {
+        // Focus on the name input as the first interactive element
+        const nameInput = document.getElementById('key-name') as HTMLInputElement;
+        nameInput?.focus();
+      }, 100);
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') {
+          const modal = document.querySelector(
+            '[data-modal="create"][aria-modal="true"]',
+          ) as HTMLElement;
+          if (!modal) return;
+
+          const focusableElements = modal.querySelectorAll(
+            'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"]):not([disabled])',
+          );
+          const firstFocusable = focusableElements[0] as HTMLElement;
+          const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+          if (event.shiftKey && document.activeElement === firstFocusable) {
+            event.preventDefault();
+            lastFocusable?.focus();
+          } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+            event.preventDefault();
+            firstFocusable?.focus();
+          }
+        }
+      };
+
+      document.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+    return undefined;
+  }, [isCreateModalOpen]);
+
+  // Focus management for view modal
+  useEffect(() => {
+    if (isViewModalOpen) {
+      setTimeout(() => {
+        // Focus on the close button as the primary action
+        const closeButton = document.querySelector(
+          '[data-modal="view"] button[variant="link"]',
+        ) as HTMLButtonElement;
+        closeButton?.focus();
+      }, 100);
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') {
+          const modal = document.querySelector(
+            '[data-modal="view"][aria-modal="true"]',
+          ) as HTMLElement;
+          if (!modal) return;
+
+          const focusableElements = modal.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])',
+          );
+          const firstFocusable = focusableElements[0] as HTMLElement;
+          const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+          if (event.shiftKey && document.activeElement === firstFocusable) {
+            event.preventDefault();
+            lastFocusable?.focus();
+          } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+            event.preventDefault();
+            firstFocusable?.focus();
+          }
+        }
+      };
+
+      document.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+    return undefined;
+  }, [isViewModalOpen]);
+
+  // Focus management for generated key modal
+  useEffect(() => {
+    if (showGeneratedKey) {
+      setTimeout(() => {
+        generatedModalPrimaryButtonRef.current?.focus();
+      }, 100);
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') {
+          const modal = document.querySelector(
+            '[data-modal="generated"][aria-modal="true"]',
+          ) as HTMLElement;
+          if (!modal) return;
+
+          const focusableElements = modal.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])',
+          );
+          const firstFocusable = focusableElements[0] as HTMLElement;
+          const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+          if (event.shiftKey && document.activeElement === firstFocusable) {
+            event.preventDefault();
+            lastFocusable?.focus();
+          } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+            event.preventDefault();
+            firstFocusable?.focus();
+          }
+        }
+      };
+
+      document.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+    return undefined;
+  }, [showGeneratedKey]);
+
+  // Focus management for delete modal
+  useEffect(() => {
+    if (isDeleteModalOpen) {
+      setTimeout(() => {
+        // Focus on the Cancel button (safer default)
+        deleteModalCancelButtonRef.current?.focus();
+      }, 100);
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') {
+          const modal = document.querySelector(
+            '[data-modal="delete"][aria-modal="true"]',
+          ) as HTMLElement;
+          if (!modal) return;
+
+          const focusableElements = modal.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])',
+          );
+          const firstFocusable = focusableElements[0] as HTMLElement;
+          const lastFocusable = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+          if (event.shiftKey && document.activeElement === firstFocusable) {
+            event.preventDefault();
+            lastFocusable?.focus();
+          } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+            event.preventDefault();
+            firstFocusable?.focus();
+          }
+        }
+      };
+
+      document.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+    return undefined;
+  }, [isDeleteModalOpen]);
+
   const getStatusBadge = (status: string) => {
     const variants = {
       active: 'success',
@@ -223,71 +402,117 @@ const ApiKeysPage: React.FC = () => {
     );
   };
 
-  const handleCreateApiKey = () => {
+  const handleCreateApiKey = (triggerElement?: HTMLElement) => {
+    // Reset edit mode
+    setIsEditMode(false);
+    setEditingKey(null);
+
     setNewKeyName('');
     setNewKeyDescription('');
     setNewKeyPermissions([]);
     setNewKeyRateLimit('1000');
     setNewKeyExpiration('never');
     setSelectedModelIds([]); // ✅ Reset model selection
+    setFormErrors({}); // Clear any previous validation errors
+    // Store reference to the trigger element for focus restoration
+    if (triggerElement) {
+      createModalTriggerRef.current = triggerElement;
+    }
     setIsCreateModalOpen(true);
   };
 
   const handleSaveApiKey = async () => {
+    const errors: { [key: string]: string } = {};
+
     if (!newKeyName.trim()) {
-      addNotification({
-        title: t('pages.apiKeys.notifications.validationError'),
-        description: t('pages.apiKeys.notifications.nameRequired'),
-        variant: 'danger',
-      });
-      return;
+      errors.name = t('pages.apiKeys.notifications.nameRequired');
     }
 
     // ✅ Validate model selection
     if (selectedModelIds.length === 0) {
+      errors.models = t('pages.apiKeys.notifications.modelsRequired');
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
       addNotification({
         title: t('pages.apiKeys.notifications.validationError'),
-        description: t('pages.apiKeys.notifications.modelsRequired'),
+        description: t('pages.apiKeys.notifications.pleaseFixFormErrors'),
         variant: 'danger',
       });
       return;
     }
 
     setCreatingKey(true);
+    setUpdatingKey(true);
 
     try {
-      const request: CreateApiKeyRequest = {
-        modelIds: selectedModelIds, // ✅ Use modelIds for multi-model support
-        name: newKeyName,
-        expiresAt:
-          newKeyExpiration !== 'never'
-            ? new Date(Date.now() + parseInt(newKeyExpiration) * 24 * 60 * 60 * 1000).toISOString()
-            : undefined,
-        // ✅ Put additional fields in metadata as backend expects
-        metadata: {
-          description: newKeyDescription || undefined,
-          permissions: newKeyPermissions,
-          rateLimit: parseInt(newKeyRateLimit),
-        },
-      };
+      if (isEditMode && editingKey) {
+        // Update existing API key
+        const updateRequest = {
+          name: newKeyName,
+          modelIds: selectedModelIds,
+          metadata: {
+            description: newKeyDescription || undefined,
+            permissions: newKeyPermissions,
+            rateLimit: parseInt(newKeyRateLimit),
+          },
+        };
 
-      const newKey = await apiKeysService.createApiKey(request);
+        await apiKeysService.updateApiKey(editingKey.id, updateRequest);
 
-      // Refresh the API keys list
-      await loadApiKeys();
+        // Refresh the API keys list
+        await loadApiKeys();
 
-      setGeneratedKey(newKey);
-      setShowGeneratedKey(true);
-      setIsCreateModalOpen(false);
+        // Reset edit mode
+        setIsEditMode(false);
+        setEditingKey(null);
+        setIsCreateModalOpen(false);
 
-      addNotification({
-        title: t('pages.apiKeys.notifications.createSuccess'),
-        description: t('pages.apiKeys.messages.keyCreatedSuccess', { name: newKeyName }),
-        variant: 'success',
-      });
+        addNotification({
+          title: t('pages.apiKeys.notifications.updateSuccess'),
+          description: t('pages.apiKeys.messages.keyUpdatedSuccess', { name: newKeyName }),
+          variant: 'success',
+        });
+      } else {
+        // Create new API key
+        const request: CreateApiKeyRequest = {
+          modelIds: selectedModelIds, // ✅ Use modelIds for multi-model support
+          name: newKeyName,
+          expiresAt:
+            newKeyExpiration !== 'never'
+              ? new Date(
+                  Date.now() + parseInt(newKeyExpiration) * 24 * 60 * 60 * 1000,
+                ).toISOString()
+              : undefined,
+          // ✅ Put additional fields in metadata as backend expects
+          metadata: {
+            description: newKeyDescription || undefined,
+            permissions: newKeyPermissions,
+            rateLimit: parseInt(newKeyRateLimit),
+          },
+        };
+
+        const newKey = await apiKeysService.createApiKey(request);
+
+        // Refresh the API keys list
+        await loadApiKeys();
+
+        setGeneratedKey(newKey);
+        setShowGeneratedKey(true);
+        setIsCreateModalOpen(false);
+
+        addNotification({
+          title: t('pages.apiKeys.notifications.createSuccess'),
+          description: t('pages.apiKeys.messages.keyCreatedSuccess', { name: newKeyName }),
+          variant: 'success',
+        });
+      }
     } catch (err: any) {
-      console.error('Failed to create API key:', err);
-      let errorMessage = t('pages.apiKeys.notifications.createErrorDesc');
+      console.error(isEditMode ? 'Failed to update API key:' : 'Failed to create API key:', err);
+      let errorMessage = isEditMode
+        ? t('pages.apiKeys.notifications.updateErrorDesc')
+        : t('pages.apiKeys.notifications.createErrorDesc');
 
       // Extract error message from Axios error response
       if (err.response?.data?.message) {
@@ -302,22 +527,52 @@ const ApiKeysPage: React.FC = () => {
       }
 
       addNotification({
-        title: t('pages.apiKeys.notifications.createError'),
+        title: isEditMode
+          ? t('pages.apiKeys.notifications.updateError')
+          : t('pages.apiKeys.notifications.createError'),
         description: errorMessage,
         variant: 'danger',
       });
     } finally {
       setCreatingKey(false);
+      setUpdatingKey(false);
     }
   };
 
-  const handleViewKey = (apiKey: ApiKey) => {
+  const handleViewKey = (apiKey: ApiKey, triggerElement?: HTMLElement) => {
     setSelectedApiKey(apiKey);
+    // Store reference to the trigger element for focus restoration
+    if (triggerElement) {
+      viewModalTriggerRef.current = triggerElement;
+    }
     setIsViewModalOpen(true);
   };
 
-  const handleDeleteKey = (apiKey: ApiKey) => {
+  const handleEditKey = (apiKey: ApiKey, triggerElement?: HTMLElement) => {
+    // Set edit mode and populate form with existing data
+    setIsEditMode(true);
+    setEditingKey(apiKey);
+    setNewKeyName(apiKey.name);
+    setNewKeyDescription(apiKey.description || '');
+    setSelectedModelIds(apiKey.models || []);
+    setNewKeyPermissions([]); // Reset permissions for edit
+    setNewKeyRateLimit('1000'); // Reset rate limit for edit
+    setNewKeyExpiration('never'); // Reset expiration for edit
+    setFormErrors({}); // Clear any previous validation errors
+
+    // Store reference to the trigger element for focus restoration
+    if (triggerElement) {
+      createModalTriggerRef.current = triggerElement;
+    }
+    setIsCreateModalOpen(true);
+  };
+
+  const handleDeleteKey = (apiKey: ApiKey, triggerElement?: HTMLElement) => {
     setKeyToDelete(apiKey);
+    // Store reference to the trigger element for focus restoration
+    if (triggerElement) {
+      deleteModalTriggerRef.current = triggerElement;
+    }
     setIsDeleteModalOpen(true);
   };
 
@@ -462,7 +717,11 @@ const ApiKeysPage: React.FC = () => {
             </Content>
           </FlexItem>
           <FlexItem>
-            <Button variant="primary" icon={<PlusCircleIcon />} onClick={handleCreateApiKey}>
+            <Button
+              variant="primary"
+              icon={<PlusCircleIcon />}
+              onClick={(event) => handleCreateApiKey(event.currentTarget)}
+            >
               {t('pages.apiKeys.createKey')}
             </Button>
           </FlexItem>
@@ -471,27 +730,51 @@ const ApiKeysPage: React.FC = () => {
 
       <PageSection>
         {error ? (
-          <EmptyState variant={EmptyStateVariant.lg}>
-            <KeyIcon />
-            <Title headingLevel="h2" size="lg">
+          <EmptyState
+            variant={EmptyStateVariant.lg}
+            role="alert"
+            aria-labelledby="error-loading-title"
+            aria-describedby="error-loading-description"
+          >
+            <KeyIcon aria-hidden="true" />
+            <Title headingLevel="h2" size="lg" id="error-loading-title">
               {t('pages.apiKeys.messages.errorLoadingTitle')}
             </Title>
-            <EmptyStateBody>{error}</EmptyStateBody>
+            <EmptyStateBody id="error-loading-description">
+              {error}
+              <div className="pf-v6-screen-reader" aria-live="assertive">
+                {t('pages.apiKeys.messages.errorScreenReader', { error })}
+              </div>
+            </EmptyStateBody>
             <EmptyStateActions>
-              <Button variant="primary" onClick={loadApiKeys}>
+              <Button
+                variant="primary"
+                onClick={loadApiKeys}
+                aria-describedby="error-loading-description"
+              >
                 {t('ui.actions.tryAgain')}
               </Button>
             </EmptyStateActions>
           </EmptyState>
         ) : apiKeys.length === 0 ? (
-          <EmptyState variant={EmptyStateVariant.lg}>
-            <KeyIcon />
-            <Title headingLevel="h2" size="lg">
+          <EmptyState variant={EmptyStateVariant.lg} role="region" aria-labelledby="no-keys-title">
+            <KeyIcon aria-hidden="true" />
+            <Title headingLevel="h2" size="lg" id="no-keys-title">
               {t('pages.apiKeys.messages.noKeysTitle')}
             </Title>
-            <EmptyStateBody>{t('pages.apiKeys.messages.noKeysDescription')}</EmptyStateBody>
+            <EmptyStateBody>
+              {t('pages.apiKeys.messages.noKeysDescription')}
+              <div className="pf-v6-screen-reader" aria-live="polite">
+                {t('pages.apiKeys.messages.noKeysScreenReader')}
+              </div>
+            </EmptyStateBody>
             <EmptyStateActions>
-              <Button variant="primary" icon={<PlusCircleIcon />} onClick={handleCreateApiKey}>
+              <Button
+                variant="primary"
+                icon={<PlusCircleIcon aria-hidden="true" />}
+                onClick={(event) => handleCreateApiKey(event.currentTarget)}
+                aria-describedby="no-keys-title"
+              >
                 {t('pages.apiKeys.createKey')}
               </Button>
             </EmptyStateActions>
@@ -500,19 +783,32 @@ const ApiKeysPage: React.FC = () => {
           <Card>
             <CardBody>
               <Table aria-label={t('pages.apiKeys.tableHeaders.apiKeysTable')} variant="compact">
+                <caption className="pf-v6-screen-reader">
+                  {t('pages.apiKeys.tableHeaders.apiKeysTableCaption', {
+                    count: apiKeys.length,
+                    description: t('pages.apiKeys.tableHeaders.apiKeysTableStructure'),
+                  })}
+                </caption>
                 <Thead>
                   <Tr>
-                    <Th style={{ width: '15%' }}>{t('pages.apiKeys.forms.name')}</Th>
-                    <Th style={{ width: '40%' }}>{t('pages.apiKeys.forms.apiKey')}</Th>
-                    <Th style={{ width: '15%' }}>{t('pages.apiKeys.forms.models')}</Th>
-                    {/* <Th>{t('pages.apiKeys.labels.lastUsed')}</Th> */}
-                    <Th style={{ width: '30%' }}>{t('pages.apiKeys.labels.actions')}</Th>
+                    <Th scope="col" style={{ width: '15%' }}>
+                      {t('pages.apiKeys.forms.name')}
+                    </Th>
+                    <Th scope="col" style={{ width: '35%' }}>
+                      {t('pages.apiKeys.forms.apiKey')}
+                    </Th>
+                    <Th scope="col" style={{ width: '15%' }}>
+                      {t('pages.apiKeys.forms.models')}
+                    </Th>
+                    <Th scope="col" style={{ width: '35%' }}>
+                      {t('pages.apiKeys.labels.actions')}
+                    </Th>
                   </Tr>
                 </Thead>
                 <Tbody>
                   {apiKeys.map((apiKey) => (
                     <Tr key={apiKey.id}>
-                      <Td>
+                      <Th scope="row">
                         <Flex direction={{ default: 'column' }}>
                           <FlexItem>
                             <strong>{apiKey.name}</strong>
@@ -528,14 +824,22 @@ const ApiKeysPage: React.FC = () => {
                             </FlexItem>
                           )}
                         </Flex>
-                      </Td>
+                      </Th>
                       <Td>
                         <Flex
                           alignItems={{ default: 'alignItemsCenter' }}
                           spaceItems={{ default: 'spaceItemsSm' }}
                         >
                           <FlexItem>
-                            <code style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
+                            <code
+                              style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}
+                              id={`key-${apiKey.id}-description`}
+                              aria-label={
+                                visibleKeys.has(apiKey.id) && apiKey.fullKey
+                                  ? t('pages.apiKeys.fullKeyVisible', { keyName: apiKey.name })
+                                  : t('pages.apiKeys.keyPreviewOnly', { keyName: apiKey.name })
+                              }
+                            >
                               {visibleKeys.has(apiKey.id) && apiKey.fullKey
                                 ? `${apiKey.fullKey}`
                                 : apiKey.keyPreview || '************'}
@@ -554,6 +858,13 @@ const ApiKeysPage: React.FC = () => {
                                 size="sm"
                                 onClick={() => toggleKeyVisibility(apiKey.id)}
                                 icon={visibleKeys.has(apiKey.id) ? <EyeSlashIcon /> : <EyeIcon />}
+                                aria-label={
+                                  visibleKeys.has(apiKey.id)
+                                    ? t('pages.apiKeys.hideKeyAriaLabel', { keyName: apiKey.name })
+                                    : t('pages.apiKeys.showKeyAriaLabel', { keyName: apiKey.name })
+                                }
+                                aria-expanded={visibleKeys.has(apiKey.id)}
+                                aria-describedby={`key-${apiKey.id}-description`}
                               />
                             </Tooltip>
                           </FlexItem>
@@ -569,6 +880,9 @@ const ApiKeysPage: React.FC = () => {
                                   )
                                 }
                                 icon={<CopyIcon />}
+                                aria-label={t('pages.apiKeys.copyKeyAriaLabel', {
+                                  keyName: apiKey.name,
+                                })}
                               />
                             </Tooltip>
                           </FlexItem>
@@ -619,18 +933,38 @@ const ApiKeysPage: React.FC = () => {
                             <Button
                               variant="secondary"
                               size="sm"
-                              onClick={() => handleViewKey(apiKey)}
+                              onClick={(event) => handleViewKey(apiKey, event.currentTarget)}
+                              aria-label={t('pages.apiKeys.viewKeyAriaLabel', {
+                                keyName: apiKey.name,
+                              })}
                             >
                               {t('pages.apiKeys.viewKey')}
                             </Button>
                           </FlexItem>
                           <FlexItem>
                             <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={(event) => handleEditKey(apiKey, event.currentTarget)}
+                              isDisabled={apiKey.status !== 'active'}
+                              icon={<PencilAltIcon />}
+                              aria-label={t('pages.apiKeys.editKeyAriaLabel', {
+                                keyName: apiKey.name,
+                              })}
+                            >
+                              {t('pages.apiKeys.editKey')}
+                            </Button>
+                          </FlexItem>
+                          <FlexItem>
+                            <Button
                               variant="danger"
                               size="sm"
-                              onClick={() => handleDeleteKey(apiKey)}
+                              onClick={(event) => handleDeleteKey(apiKey, event.currentTarget)}
                               isDisabled={apiKey.status !== 'active'}
                               icon={<TrashIcon />}
+                              aria-label={t('pages.apiKeys.deleteKeyAriaLabel', {
+                                keyName: apiKey.name,
+                              })}
                             >
                               {t('pages.apiKeys.deleteKey')}
                             </Button>
@@ -649,9 +983,30 @@ const ApiKeysPage: React.FC = () => {
       {/* Create API Key Modal */}
       <Modal
         variant={ModalVariant.medium}
-        title={t('pages.apiKeys.modals.createTitle')}
+        title={
+          isEditMode ? t('pages.apiKeys.modals.editTitle') : t('pages.apiKeys.modals.createTitle')
+        }
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setIsEditMode(false);
+          setEditingKey(null);
+          // Restore focus to the trigger element
+          setTimeout(() => {
+            createModalTriggerRef.current?.focus();
+          }, 100);
+        }}
+        aria-modal="true"
+        data-modal="create"
+        onEscapePress={() => {
+          setIsCreateModalOpen(false);
+          setIsEditMode(false);
+          setEditingKey(null);
+          // Restore focus to the trigger element
+          setTimeout(() => {
+            createModalTriggerRef.current?.focus();
+          }, 100);
+        }}
       >
         <ModalBody>
           <Form>
@@ -660,36 +1015,65 @@ const ApiKeysPage: React.FC = () => {
                 isRequired
                 type="text"
                 id="key-name"
+                name="key-name"
                 value={newKeyName}
-                onChange={(_event, value) => setNewKeyName(value)}
+                onChange={(_event, value) => {
+                  setNewKeyName(value);
+                  if (formErrors.name && value.trim()) {
+                    const newErrors = { ...formErrors };
+                    delete newErrors.name;
+                    setFormErrors(newErrors);
+                  }
+                }}
                 placeholder={t('pages.apiKeys.placeholders.keyName')}
+                aria-required="true"
+                aria-invalid={formErrors.name ? 'true' : 'false'}
+                aria-describedby={formErrors.name ? 'key-name-error' : undefined}
+                validated={formErrors.name ? 'error' : 'default'}
               />
+              {formErrors.name && (
+                <HelperText id="key-name-error">
+                  <HelperTextItem variant="error">{formErrors.name}</HelperTextItem>
+                </HelperText>
+              )}
             </FormGroup>
 
             <FormGroup label={t('pages.apiKeys.forms.description')} fieldId="key-description">
               <TextInput
                 type="text"
                 id="key-description"
+                name="key-description"
                 value={newKeyDescription}
                 onChange={(_event, value) => setNewKeyDescription(value)}
                 placeholder={t('pages.apiKeys.placeholders.keyDescription')}
+                aria-describedby="key-description-helper"
               />
             </FormGroup>
 
             {/* ✅ Multi-model selection */}
             <FormGroup label={t('pages.apiKeys.forms.models')} isRequired fieldId="key-models">
               <Select
-                role="menu"
+                role="listbox"
                 id="key-models"
                 isOpen={isModelSelectOpen}
                 onOpenChange={setIsModelSelectOpen}
+                aria-label={t('pages.apiKeys.forms.modelsAriaLabel')}
+                aria-required="true"
+                aria-invalid={formErrors.models ? 'true' : 'false'}
+                aria-describedby={formErrors.models ? 'key-models-error' : undefined}
                 toggle={(toggleRef: React.Ref<MenuToggleElement>) => (
                   <MenuToggle
                     ref={toggleRef}
                     onClick={() => setIsModelSelectOpen(!isModelSelectOpen)}
                     isExpanded={isModelSelectOpen}
+                    aria-expanded={isModelSelectOpen}
+                    aria-haspopup="listbox"
+                    aria-invalid={formErrors.models ? 'true' : 'false'}
+                    aria-describedby={formErrors.models ? 'key-models-error' : undefined}
                   >
-                    {t('pages.apiKeys.selectModels')}
+                    {selectedModelIds.length === 0
+                      ? t('pages.apiKeys.selectModels')
+                      : t('pages.apiKeys.modelsSelected', { count: selectedModelIds.length })}
                     {selectedModelIds.length > 0 && <Badge isRead>{selectedModelIds.length}</Badge>}
                   </MenuToggle>
                 )}
@@ -699,6 +1083,12 @@ const ApiKeysPage: React.FC = () => {
                     setSelectedModelIds(selectedModelIds.filter((id) => id !== selectionString));
                   } else {
                     setSelectedModelIds([...selectedModelIds, selectionString]);
+                  }
+                  // Clear validation error when user makes a selection
+                  if (formErrors.models) {
+                    const newErrors = { ...formErrors };
+                    delete newErrors.models;
+                    setFormErrors(newErrors);
                   }
                 }}
                 selected={selectedModelIds}
@@ -726,6 +1116,7 @@ const ApiKeysPage: React.FC = () => {
                             setSelectedModelIds(models.map((m) => m.id));
                           }
                         }}
+                        aria-label={t('pages.apiKeys.selectAllModelsAriaLabel')}
                       >
                         <strong>{t('pages.apiKeys.selectAll')}</strong>
                       </SelectOption>
@@ -736,6 +1127,7 @@ const ApiKeysPage: React.FC = () => {
                           value={model.id}
                           hasCheckbox
                           isSelected={selectedModelIds.includes(model.id)}
+                          aria-label={t('pages.apiKeys.selectModelAriaLabel', { name: model.name })}
                         >
                           {model.name}
                         </SelectOption>
@@ -744,16 +1136,17 @@ const ApiKeysPage: React.FC = () => {
                   )}
                 </SelectList>
               </Select>
+              {formErrors.models && (
+                <HelperText id="key-models-error">
+                  <HelperTextItem variant="error">{formErrors.models}</HelperTextItem>
+                </HelperText>
+              )}
               {models.length === 0 && !loadingModels && (
-                <div
-                  style={{
-                    marginTop: '0.5rem',
-                    fontSize: '0.875rem',
-                    color: 'var(--pf-v6-global--danger-color--100)',
-                  }}
-                >
-                  {t('pages.apiKeys.messages.noSubscribedModelsError')}
-                </div>
+                <HelperText id="key-models-no-subscriptions">
+                  <HelperTextItem variant="error">
+                    {t('pages.apiKeys.messages.noSubscribedModelsError')}
+                  </HelperTextItem>
+                </HelperText>
               )}
             </FormGroup>
             {selectedModelIds.length > 0 && (
@@ -811,10 +1204,32 @@ const ApiKeysPage: React.FC = () => {
               justifyContent: 'flex-end',
             }}
           >
-            <Button variant="primary" onClick={handleSaveApiKey} isLoading={creatingKey}>
-              {creatingKey ? t('pages.apiKeys.creating') : t('pages.apiKeys.createKey')}
+            <Button
+              ref={createModalPrimaryButtonRef}
+              variant="primary"
+              onClick={handleSaveApiKey}
+              isLoading={creatingKey || updatingKey}
+            >
+              {isEditMode
+                ? updatingKey
+                  ? t('pages.apiKeys.updating')
+                  : t('pages.apiKeys.updateKey')
+                : creatingKey
+                  ? t('pages.apiKeys.creating')
+                  : t('pages.apiKeys.createKey')}
             </Button>
-            <Button variant="link" onClick={() => setIsCreateModalOpen(false)}>
+            <Button
+              variant="link"
+              onClick={() => {
+                setIsCreateModalOpen(false);
+                setIsEditMode(false);
+                setEditingKey(null);
+                // Restore focus to the trigger element
+                setTimeout(() => {
+                  createModalTriggerRef.current?.focus();
+                }, 100);
+              }}
+            >
               {t('pages.apiKeys.labels.cancel')}
             </Button>
           </div>
@@ -826,7 +1241,22 @@ const ApiKeysPage: React.FC = () => {
         variant={ModalVariant.medium}
         title={selectedApiKey?.name || ''}
         isOpen={isViewModalOpen}
-        onClose={() => setIsViewModalOpen(false)}
+        onClose={() => {
+          setIsViewModalOpen(false);
+          // Restore focus to the trigger element
+          setTimeout(() => {
+            viewModalTriggerRef.current?.focus();
+          }, 100);
+        }}
+        aria-modal="true"
+        data-modal="view"
+        onEscapePress={() => {
+          setIsViewModalOpen(false);
+          // Restore focus to the trigger element
+          setTimeout(() => {
+            viewModalTriggerRef.current?.focus();
+          }, 100);
+        }}
       >
         <ModalHeader>
           <Flex
@@ -913,11 +1343,16 @@ const ApiKeysPage: React.FC = () => {
 
               <div style={{ marginTop: '1rem' }}>
                 <Table aria-label={t('pages.apiKeys.tableHeaders.keyDetails')} variant="compact">
+                  <caption className="pf-v6-screen-reader">
+                    {t('pages.apiKeys.tableHeaders.keyDetailsCaption', {
+                      keyName: selectedApiKey.name,
+                    })}
+                  </caption>
                   <Tbody>
                     <Tr>
-                      <Td>
+                      <Th scope="row">
                         <strong>{t('pages.apiKeys.forms.models')}</strong>
-                      </Td>
+                      </Th>
                       <Td>
                         {selectedApiKey.models && selectedApiKey.models.length > 0 ? (
                           <LabelGroup>
@@ -938,37 +1373,37 @@ const ApiKeysPage: React.FC = () => {
                       </Td>
                     </Tr>
                     <Tr>
-                      <Td>
+                      <Th scope="row">
                         <strong>API URL</strong>
-                      </Td>
+                      </Th>
                       <Td>{litellmApiUrl}/v1</Td>
                     </Tr>
                     <Tr>
-                      <Td>
+                      <Th scope="row">
                         <strong>{t('pages.apiKeys.labels.created')}</strong>
-                      </Td>
+                      </Th>
                       <Td>{new Date(selectedApiKey.createdAt).toLocaleDateString()}</Td>
                     </Tr>
                     <Tr>
-                      <Td>
+                      <Th scope="row">
                         <strong>{t('pages.apiKeys.labels.totalRequests')}</strong>
-                      </Td>
+                      </Th>
                       <Td>{selectedApiKey.usageCount.toLocaleString()}</Td>
                     </Tr>
 
                     {selectedApiKey.expiresAt && (
                       <Tr>
-                        <Td>
+                        <Th scope="row">
                           <strong>{t('pages.apiKeys.labels.expires')}</strong>
-                        </Td>
+                        </Th>
                         <Td>{new Date(selectedApiKey.expiresAt).toLocaleDateString()}</Td>
                       </Tr>
                     )}
                     {selectedApiKey.description && (
                       <Tr>
-                        <Td>
+                        <Th scope="row">
                           <strong>{t('pages.apiKeys.labels.description')}</strong>
-                        </Td>
+                        </Th>
                         <Td>{selectedApiKey.description}</Td>
                       </Tr>
                     )}
@@ -1030,7 +1465,16 @@ curl -X POST ${litellmApiUrl}/v1/chat/completions \
               justifyContent: 'flex-end',
             }}
           >
-            <Button variant="link" onClick={() => setIsViewModalOpen(false)}>
+            <Button
+              variant="link"
+              onClick={() => {
+                setIsViewModalOpen(false);
+                // Restore focus to the trigger element
+                setTimeout(() => {
+                  viewModalTriggerRef.current?.focus();
+                }, 100);
+              }}
+            >
               {t('pages.apiKeys.labels.close')}
             </Button>
           </div>
@@ -1042,7 +1486,22 @@ curl -X POST ${litellmApiUrl}/v1/chat/completions \
         variant={ModalVariant.medium}
         title={t('pages.apiKeys.modals.createdTitle')}
         isOpen={showGeneratedKey}
-        onClose={() => setShowGeneratedKey(false)}
+        onClose={() => {
+          setShowGeneratedKey(false);
+          // Focus returns to the create modal trigger after key generation
+          setTimeout(() => {
+            createModalTriggerRef.current?.focus();
+          }, 100);
+        }}
+        aria-modal="true"
+        data-modal="generated"
+        onEscapePress={() => {
+          setShowGeneratedKey(false);
+          // Focus returns to the create modal trigger after key generation
+          setTimeout(() => {
+            createModalTriggerRef.current?.focus();
+          }, 100);
+        }}
       >
         <ModalBody>
           {generatedKey && (
@@ -1074,17 +1533,22 @@ curl -X POST ${litellmApiUrl}/v1/chat/completions \
                   aria-label={t('pages.apiKeys.tableHeaders.generatedKeyDetails')}
                   variant="compact"
                 >
+                  <caption className="pf-v6-screen-reader">
+                    {t('pages.apiKeys.tableHeaders.generatedKeyDetailsCaption', {
+                      keyName: generatedKey.name,
+                    })}
+                  </caption>
                   <Tbody>
                     <Tr>
-                      <Td>
+                      <Th scope="row">
                         <strong>{t('pages.apiKeys.forms.name')}</strong>
-                      </Td>
+                      </Th>
                       <Td>{generatedKey.name}</Td>
                     </Tr>
                     <Tr>
-                      <Td>
+                      <Th scope="row">
                         <strong>{t('pages.apiKeys.forms.models')}</strong>
-                      </Td>
+                      </Th>
                       <Td>
                         {generatedKey.models && generatedKey.models.length > 0 ? (
                           <LabelGroup>
@@ -1117,9 +1581,9 @@ curl -X POST ${litellmApiUrl}/v1/chat/completions \
                      */}
                     {generatedKey.expiresAt && (
                       <Tr>
-                        <Td>
+                        <Th scope="row">
                           <strong>{t('pages.apiKeys.labels.expires')}</strong>
-                        </Td>
+                        </Th>
                         <Td>{new Date(generatedKey.expiresAt).toLocaleDateString()}</Td>
                       </Tr>
                     )}
@@ -1137,7 +1601,17 @@ curl -X POST ${litellmApiUrl}/v1/chat/completions \
               justifyContent: 'flex-end',
             }}
           >
-            <Button variant="primary" onClick={() => setShowGeneratedKey(false)}>
+            <Button
+              ref={generatedModalPrimaryButtonRef}
+              variant="primary"
+              onClick={() => {
+                setShowGeneratedKey(false);
+                // Focus returns to the create modal trigger after key generation
+                setTimeout(() => {
+                  createModalTriggerRef.current?.focus();
+                }, 100);
+              }}
+            >
               {t('pages.apiKeys.labels.close')}
             </Button>
           </div>
@@ -1149,7 +1623,22 @@ curl -X POST ${litellmApiUrl}/v1/chat/completions \
         variant={ModalVariant.small}
         title={t('pages.apiKeys.modals.deleteTitle')}
         isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          // Restore focus to the trigger element
+          setTimeout(() => {
+            deleteModalTriggerRef.current?.focus();
+          }, 100);
+        }}
+        aria-modal="true"
+        data-modal="delete"
+        onEscapePress={() => {
+          setIsDeleteModalOpen(false);
+          // Restore focus to the trigger element
+          setTimeout(() => {
+            deleteModalTriggerRef.current?.focus();
+          }, 100);
+        }}
       >
         <ModalBody>
           {keyToDelete && (
@@ -1190,7 +1679,17 @@ curl -X POST ${litellmApiUrl}/v1/chat/completions \
             <Button variant="danger" onClick={confirmDeleteKey}>
               {t('pages.apiKeys.deleteKey')}
             </Button>
-            <Button variant="link" onClick={() => setIsDeleteModalOpen(false)}>
+            <Button
+              ref={deleteModalCancelButtonRef}
+              variant="link"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                // Restore focus to the trigger element
+                setTimeout(() => {
+                  deleteModalTriggerRef.current?.focus();
+                }, 100);
+              }}
+            >
               {t('pages.apiKeys.labels.cancel')}
             </Button>
           </div>

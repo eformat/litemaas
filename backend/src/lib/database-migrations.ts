@@ -5,6 +5,11 @@
 
 import { DatabaseUtils } from '../types/common.types';
 
+// Get default values from environment or use hardcoded fallbacks
+const getDefaultUserMaxBudget = () => process.env.DEFAULT_USER_MAX_BUDGET || '100.00';
+const getDefaultUserTPMLimit = () => process.env.DEFAULT_USER_TPM_LIMIT || '10000';
+const getDefaultUserRPMLimit = () => process.env.DEFAULT_USER_RPM_LIMIT || '60';
+
 // Users table
 export const usersTable = `
 CREATE TABLE IF NOT EXISTS users (
@@ -16,9 +21,9 @@ CREATE TABLE IF NOT EXISTS users (
     oauth_id VARCHAR(255) NOT NULL,
     roles TEXT[] DEFAULT ARRAY['user'],
     is_active BOOLEAN DEFAULT true,
-    max_budget DECIMAL(10,2) DEFAULT 100.00,
-    tpm_limit INTEGER DEFAULT 1000,
-    rpm_limit INTEGER DEFAULT 60,
+    max_budget DECIMAL(10,2) DEFAULT ${getDefaultUserMaxBudget()},
+    tpm_limit INTEGER DEFAULT ${getDefaultUserTPMLimit()},
+    rpm_limit INTEGER DEFAULT ${getDefaultUserRPMLimit()},
     sync_status VARCHAR(20) DEFAULT 'pending' CHECK (sync_status IN ('pending', 'synced', 'error')),
     last_login_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -31,9 +36,9 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_users_oauth ON users(oauth_provider, oauth_id);
 
 -- Add missing columns for existing tables
-ALTER TABLE users ADD COLUMN IF NOT EXISTS max_budget DECIMAL(10,2) DEFAULT 100.00;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS tpm_limit INTEGER DEFAULT 1000;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS rpm_limit INTEGER DEFAULT 60;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS max_budget DECIMAL(10,2) DEFAULT ${getDefaultUserMaxBudget()};
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tpm_limit INTEGER DEFAULT ${getDefaultUserTPMLimit()};
+ALTER TABLE users ADD COLUMN IF NOT EXISTS rpm_limit INTEGER DEFAULT ${getDefaultUserRPMLimit()};
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sync_status VARCHAR(20) DEFAULT 'pending';
 
 -- Drop lite_llm_user_id column if it exists (no longer needed as id is used directly)
@@ -110,13 +115,28 @@ CREATE TABLE IF NOT EXISTS models (
     availability VARCHAR(50) DEFAULT 'available',
     version VARCHAR(50),
     metadata JSONB DEFAULT '{}',
+    -- Admin-specific fields extracted from LiteLLM
+    api_base VARCHAR(500),
+    tpm INTEGER,
+    rpm INTEGER,
+    max_tokens INTEGER,
+    litellm_model_id VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add missing admin columns for existing tables
+ALTER TABLE models ADD COLUMN IF NOT EXISTS api_base VARCHAR(500);
+ALTER TABLE models ADD COLUMN IF NOT EXISTS tpm INTEGER;
+ALTER TABLE models ADD COLUMN IF NOT EXISTS rpm INTEGER;
+ALTER TABLE models ADD COLUMN IF NOT EXISTS max_tokens INTEGER;
+ALTER TABLE models ADD COLUMN IF NOT EXISTS litellm_model_id VARCHAR(255);
+ALTER TABLE models ADD COLUMN IF NOT EXISTS backend_model_name VARCHAR(255);
+
 CREATE INDEX IF NOT EXISTS idx_models_provider ON models(provider);
 CREATE INDEX IF NOT EXISTS idx_models_category ON models(category);
 CREATE INDEX IF NOT EXISTS idx_models_availability ON models(availability);
+CREATE INDEX IF NOT EXISTS idx_models_litellm_model_id ON models(litellm_model_id);
 `;
 
 // Subscriptions table
@@ -325,6 +345,85 @@ CREATE INDEX IF NOT EXISTS idx_oauth_sessions_user_id ON oauth_sessions(user_id)
 CREATE INDEX IF NOT EXISTS idx_oauth_sessions_expires_at ON oauth_sessions(expires_at);
 `;
 
+// Banner announcements table
+export const bannerAnnouncementsTable = `
+CREATE TABLE IF NOT EXISTS banner_announcements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Core fields
+    name VARCHAR(100) NOT NULL DEFAULT 'Untitled Banner',
+    is_active BOOLEAN DEFAULT false,
+    priority INTEGER DEFAULT 0,
+    
+    -- Content (JSON for i18n support)
+    content JSONB NOT NULL DEFAULT '{}',
+    
+    -- Styling and behavior
+    variant VARCHAR(20) DEFAULT 'info' 
+        CHECK (variant IN ('info', 'warning', 'danger', 'success', 'default')),
+    is_dismissible BOOLEAN DEFAULT false,
+    dismiss_duration_hours INTEGER,
+    
+    -- Scheduling (for future enhancement)
+    start_date TIMESTAMP WITH TIME ZONE,
+    end_date TIMESTAMP WITH TIME ZONE,
+    
+    -- Targeting (for future enhancement)
+    target_roles TEXT[],
+    target_user_ids UUID[],
+    
+    -- Rich content support
+    link_url VARCHAR(500),
+    link_text JSONB,
+    markdown_enabled BOOLEAN DEFAULT false,
+    
+    -- Audit fields
+    created_by UUID REFERENCES users(id),
+    updated_by UUID REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add name column for existing tables (migration for backward compatibility)
+ALTER TABLE banner_announcements ADD COLUMN IF NOT EXISTS name VARCHAR(100) NOT NULL DEFAULT 'Untitled Banner';
+
+CREATE INDEX IF NOT EXISTS idx_banner_active ON banner_announcements(is_active, priority DESC)
+    WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_banner_created_by ON banner_announcements(created_by);
+CREATE INDEX IF NOT EXISTS idx_banner_updated_by ON banner_announcements(updated_by);
+CREATE INDEX IF NOT EXISTS idx_banner_name ON banner_announcements(name);
+`;
+
+// User banner dismissals table
+export const userBannerDismissalsTable = `
+CREATE TABLE IF NOT EXISTS user_banner_dismissals (
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    banner_id UUID REFERENCES banner_announcements(id) ON DELETE CASCADE,
+    dismissed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, banner_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_banner_dismissals_user_id ON user_banner_dismissals(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_banner_dismissals_banner_id ON user_banner_dismissals(banner_id);
+`;
+
+// Banner audit log table
+export const bannerAuditLogTable = `
+CREATE TABLE IF NOT EXISTS banner_audit_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    banner_id UUID REFERENCES banner_announcements(id) ON DELETE CASCADE,
+    action VARCHAR(20) NOT NULL, -- 'create', 'update', 'delete', 'activate', 'deactivate'
+    changed_by UUID REFERENCES users(id),
+    previous_state JSONB,
+    new_state JSONB,
+    changed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_banner_audit_log_banner_id ON banner_audit_log(banner_id);
+CREATE INDEX IF NOT EXISTS idx_banner_audit_log_changed_by ON banner_audit_log(changed_by);
+CREATE INDEX IF NOT EXISTS idx_banner_audit_log_changed_at ON banner_audit_log(changed_at);
+`;
+
 // Updated triggers for updated_at columns
 export const updatedAtTriggers = `
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -346,6 +445,9 @@ CREATE TRIGGER update_models_updated_at BEFORE UPDATE ON models FOR EACH ROW EXE
 
 DROP TRIGGER IF EXISTS update_subscriptions_updated_at ON subscriptions;
 CREATE TRIGGER update_subscriptions_updated_at BEFORE UPDATE ON subscriptions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_banner_announcements_updated_at ON banner_announcements;
+CREATE TRIGGER update_banner_announcements_updated_at BEFORE UPDATE ON banner_announcements FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 `;
 
 // Default team creation
@@ -412,6 +514,25 @@ ON CONFLICT (team_id, user_id) DO NOTHING;
 CREATE INDEX IF NOT EXISTS idx_team_members_default_team ON team_members(team_id) WHERE team_id = '00000000-0000-0000-0000-000000000001'::UUID;
 `;
 
+// Populate litellm_model_id from metadata migration
+export const litellmModelIdMigration = `
+-- Populate litellm_model_id column from existing metadata for models that don't have it set
+UPDATE models 
+SET litellm_model_id = metadata->'litellm_model_info'->>'id'
+WHERE litellm_model_id IS NULL 
+  AND metadata->'litellm_model_info'->>'id' IS NOT NULL 
+  AND metadata->'litellm_model_info'->>'id' != '';
+
+-- Log the migration results
+DO $$
+DECLARE 
+    updated_count INTEGER;
+BEGIN
+    GET DIAGNOSTICS updated_count = ROW_COUNT;
+    RAISE NOTICE 'Populated litellm_model_id for % models from metadata', updated_count;
+END $$;
+`;
+
 // Main migration function
 export const applyMigrations = async (dbUtils: DatabaseUtils) => {
   console.log('🚀 Starting database migrations...');
@@ -454,11 +575,23 @@ export const applyMigrations = async (dbUtils: DatabaseUtils) => {
     console.log('🔐 Creating oauth_sessions table...');
     await dbUtils.query(oauthSessionsTable);
 
+    console.log('📢 Creating banner_announcements table...');
+    await dbUtils.query(bannerAnnouncementsTable);
+
+    console.log('🚫 Creating user_banner_dismissals table...');
+    await dbUtils.query(userBannerDismissalsTable);
+
+    console.log('📝 Creating banner_audit_log table...');
+    await dbUtils.query(bannerAuditLogTable);
+
     console.log('⚡ Creating triggers...');
     await dbUtils.query(updatedAtTriggers);
 
     console.log('👥 Creating default team and assigning users...');
     await dbUtils.query(defaultTeamMigration);
+
+    console.log('🔧 Populating litellm_model_id from metadata...');
+    await dbUtils.query(litellmModelIdMigration);
 
     console.log('✅ Database migrations completed successfully!');
   } catch (error) {

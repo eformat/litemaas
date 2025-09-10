@@ -5,3 +5,5 @@ export * from './subscriptions';
 export * from './api-keys';
 export * from './usage';
 export * from './health';
+export * from './admin';
+export * from './banners';

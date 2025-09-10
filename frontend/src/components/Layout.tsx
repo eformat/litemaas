@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -51,12 +51,22 @@ import {
 import { appConfig } from '../config/navigation';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
+import { BannerProvider } from '../contexts/BannerContext';
 import { NotificationDrawer, NotificationBadgeButton } from './NotificationDrawer';
 import { AlertToastGroup } from './AlertToastGroup';
+import { BannerAnnouncement } from './BannerAnnouncement';
 import axios from 'axios';
 
 const Layout: React.FC = () => {
   const { t, i18n } = useTranslation();
+
+  // Helper function to get the most powerful role
+  const getMostPowerfulRole = (roles: string[]): string => {
+    if (roles.includes('admin')) return 'admin';
+    if (roles.includes('admin-readonly')) return 'adminReadonly';
+    if (roles.includes('user')) return 'user';
+    return 'user'; // default fallback
+  };
   const { unreadCount, toastNotifications, removeToastNotification } = useNotifications();
   const { user, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -66,7 +76,15 @@ const Layout: React.FC = () => {
   const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
   const [repoStars, setRepoStars] = React.useState<number | null>(null);
   const [repoForks, setRepoForks] = React.useState<number | null>(null);
+  const [languageDropdownFocusedIndex, setLanguageDropdownFocusedIndex] = useState(-1);
+  const [userDropdownFocusedIndex, setUserDropdownFocusedIndex] = useState(-1);
   const location = useLocation();
+
+  // Refs for dropdown management
+  const languageDropdownRef = useRef<HTMLUListElement>(null);
+  const userDropdownRef = useRef<HTMLUListElement>(null);
+  const languageToggleRef = useRef<HTMLButtonElement>(null);
+  const userToggleRef = useRef<HTMLButtonElement>(null);
 
   // Fetch GitHub stars and forks
   React.useEffect(() => {
@@ -105,84 +123,235 @@ const Layout: React.FC = () => {
   const handleLanguageChange = (language: string) => {
     i18n.changeLanguage(language);
     setIsLanguageDropdownOpen(false);
+    setLanguageDropdownFocusedIndex(-1);
+    // Return focus to toggle button
+    setTimeout(() => languageToggleRef.current?.focus(), 0);
   };
 
-  const PageNav = (
-    <Nav aria-label="Global navigation">
-      <NavList>
-        {appConfig.navigation.map((navItem) => {
-          const Icon = navItem.icon;
-          const isActive = location.pathname === navItem.path;
+  // Language dropdown keyboard navigation
+  const languageDropdownItems = [
+    { key: 'en', label: t('ui.language.english'), flag: '🇺🇸' },
+    { key: 'es', label: t('ui.language.spanish'), flag: '🇪🇸' },
+    { key: 'fr', label: t('ui.language.french'), flag: '🇫🇷' },
+    { key: 'de', label: t('ui.language.german'), flag: '🇩🇪' },
+    { key: 'it', label: t('ui.language.italian'), flag: '🇮🇹' },
+    { key: 'ko', label: t('ui.language.korean'), flag: '🇰🇷' },
+    { key: 'ja', label: t('ui.language.japanese'), flag: '🇯🇵' },
+    { key: 'zh', label: t('ui.language.chinese'), flag: '🇨🇳' },
+    { key: 'elv', label: t('ui.language.elvish'), flag: '🧝‍♂️' },
+  ];
 
-          return (
-            <NavItem key={navItem.id} itemId={navItem.id} isActive={isActive}>
-              <Link to={navItem.path || '#'}>
-                {Icon && <Icon />}
-                <span style={{ marginLeft: Icon ? '0.5rem' : '0' }}>{t(navItem.label)}</span>
-              </Link>
-            </NavItem>
-          );
-        })}
+  const userDropdownActions = [
+    {
+      key: 'logout',
+      label: t('ui.actions.logout'),
+      action: () => {
+        setIsUserDropdownOpen(false);
+        setUserDropdownFocusedIndex(-1);
+        logout();
+      },
+    },
+  ];
+
+  const handleLanguageDropdownKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      const { key } = event;
+      const itemCount = languageDropdownItems.length;
+
+      switch (key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          setLanguageDropdownFocusedIndex((prevIndex) => {
+            const newIndex = prevIndex < itemCount - 1 ? prevIndex + 1 : 0;
+            return newIndex;
+          });
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          setLanguageDropdownFocusedIndex((prevIndex) => {
+            const newIndex = prevIndex > 0 ? prevIndex - 1 : itemCount - 1;
+            return newIndex;
+          });
+          break;
+        case 'Home':
+          event.preventDefault();
+          setLanguageDropdownFocusedIndex(0);
+          break;
+        case 'End':
+          event.preventDefault();
+          setLanguageDropdownFocusedIndex(itemCount - 1);
+          break;
+        case 'Enter':
+        case ' ':
+          event.preventDefault();
+          if (languageDropdownFocusedIndex >= 0) {
+            const selectedItem = languageDropdownItems[languageDropdownFocusedIndex];
+            handleLanguageChange(selectedItem.key);
+          }
+          break;
+        case 'Escape':
+          event.preventDefault();
+          setIsLanguageDropdownOpen(false);
+          setLanguageDropdownFocusedIndex(-1);
+          setTimeout(() => languageToggleRef.current?.focus(), 0);
+          break;
+      }
+    },
+    [languageDropdownFocusedIndex, languageDropdownItems, handleLanguageChange],
+  );
+
+  const handleUserDropdownKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      const { key } = event;
+      const itemCount = userDropdownActions.length;
+
+      switch (key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          setUserDropdownFocusedIndex((prevIndex) => {
+            const newIndex = prevIndex < itemCount - 1 ? prevIndex + 1 : 0;
+            return newIndex;
+          });
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          setUserDropdownFocusedIndex((prevIndex) => {
+            const newIndex = prevIndex > 0 ? prevIndex - 1 : itemCount - 1;
+            return newIndex;
+          });
+          break;
+        case 'Home':
+          event.preventDefault();
+          setUserDropdownFocusedIndex(0);
+          break;
+        case 'End':
+          event.preventDefault();
+          setUserDropdownFocusedIndex(itemCount - 1);
+          break;
+        case 'Enter':
+        case ' ':
+          event.preventDefault();
+          if (userDropdownFocusedIndex >= 0) {
+            const selectedAction = userDropdownActions[userDropdownFocusedIndex];
+            setIsUserDropdownOpen(false);
+            setUserDropdownFocusedIndex(-1);
+            selectedAction.action();
+          }
+          break;
+        case 'Escape':
+          event.preventDefault();
+          setIsUserDropdownOpen(false);
+          setUserDropdownFocusedIndex(-1);
+          setTimeout(() => userToggleRef.current?.focus(), 0);
+          break;
+      }
+    },
+    [userDropdownFocusedIndex, userDropdownActions, logout],
+  );
+
+  // Effect to manage focus when dropdowns open
+  useEffect(() => {
+    if (isLanguageDropdownOpen) {
+      setLanguageDropdownFocusedIndex(0);
+    } else {
+      setLanguageDropdownFocusedIndex(-1);
+    }
+  }, [isLanguageDropdownOpen]);
+
+  useEffect(() => {
+    if (isUserDropdownOpen) {
+      setUserDropdownFocusedIndex(0);
+    } else {
+      setUserDropdownFocusedIndex(-1);
+    }
+  }, [isUserDropdownOpen]);
+
+  const PageNav = (
+    <Nav aria-label="Global navigation" id="main-navigation">
+      <NavList>
+        {appConfig.navigation
+          .filter((navItem) => {
+            // Show item if no required roles or if user has at least one of the required roles
+            if (!navItem.requiredRoles) return true;
+            return navItem.requiredRoles.some((role) => user?.roles?.includes(role));
+          })
+          .map((navItem) => {
+            // Handle separator items (render as Divider)
+            if (navItem.isGroup) {
+              return (
+                <div key={navItem.id}>
+                  <Divider component="li" />
+                  <Content key="role-display" component={ContentVariants.h4}>
+                    {user?.roles ? t('role.' + getMostPowerfulRole(user.roles)) : ''}
+                  </Content>
+                </div>
+              );
+            }
+
+            const Icon = navItem.icon;
+            const isActive = location.pathname === navItem.path;
+
+            return (
+              <NavItem key={navItem.id} itemId={navItem.id} isActive={isActive}>
+                <Link to={navItem.path || '#'}>
+                  {Icon && <Icon />}
+                  <span style={{ marginLeft: Icon ? '0.5rem' : '0' }}>{t(navItem.label)}</span>
+                </Link>
+              </NavItem>
+            );
+          })}
       </NavList>
     </Nav>
   );
 
-  const languageDropdownItems = (
-    <DropdownList>
-      <DropdownItem key="en" onClick={() => handleLanguageChange('en')}>
-        🇺🇸 {t('ui.language.english')}
-      </DropdownItem>
-      <DropdownItem key="es" onClick={() => handleLanguageChange('es')}>
-        🇪🇸 {t('ui.language.spanish')}
-      </DropdownItem>
-      <DropdownItem key="fr" onClick={() => handleLanguageChange('fr')}>
-        🇫🇷 {t('ui.language.french')}
-      </DropdownItem>
-      <DropdownItem key="de" onClick={() => handleLanguageChange('de')}>
-        🇩🇪 {t('ui.language.german')}
-      </DropdownItem>
-      <DropdownItem key="it" onClick={() => handleLanguageChange('it')}>
-        🇮🇹 {t('ui.language.italian')}
-      </DropdownItem>
-      <DropdownItem key="ko" onClick={() => handleLanguageChange('ko')}>
-        🇰🇷 {t('ui.language.korean')}
-      </DropdownItem>
-      <DropdownItem key="ja" onClick={() => handleLanguageChange('ja')}>
-        🇯🇵 {t('ui.language.japanese')}
-      </DropdownItem>
-      <DropdownItem key="zh" onClick={() => handleLanguageChange('zh')}>
-        🇨🇳 {t('ui.language.chinese')}
-      </DropdownItem>
-      <DropdownItem key="elv" onClick={() => handleLanguageChange('elv')}>
-        🧝‍♂️ {t('ui.language.elvish')}
-      </DropdownItem>
+  const languageDropdownItemsJSX = (
+    <DropdownList ref={languageDropdownRef} onKeyDown={handleLanguageDropdownKeyDown}>
+      {languageDropdownItems.map((item, index) => (
+        <DropdownItem
+          key={item.key}
+          onClick={() => handleLanguageChange(item.key)}
+          isFocused={index === languageDropdownFocusedIndex}
+          tabIndex={index === languageDropdownFocusedIndex ? 0 : -1}
+          role="menuitem"
+        >
+          {item.flag} {item.label}
+        </DropdownItem>
+      ))}
     </DropdownList>
   );
 
-  const userDropdownItems = (
-    <DropdownList>
-      <DropdownItem isDisabled key="user-info">
+  const userDropdownItemsJSX = (
+    <DropdownList ref={userDropdownRef} onKeyDown={handleUserDropdownKeyDown}>
+      <DropdownItem isDisabled key="user-info" role="presentation">
         <div style={{ padding: '0.5rem 0' }}>
           <div style={{ fontWeight: 'bold' }}>{user?.name || user?.username}</div>
           <div style={{ fontSize: '0.875rem', color: 'var(--pf-t--global--text--color--subtle)' }}>
             {user?.email}
           </div>
           {user?.roles?.includes('admin') && (
-            <div style={{ fontSize: '0.75rem', color: 'var(--pf-t--global--text--color--brand)' }}>
-              Administrator
+            <div style={{ fontSize: '0.75rem', color: 'var(--pf-t--global--text--color--subtle)' }}>
+              {t('role.admin')}
+            </div>
+          )}
+          {user?.roles?.includes('admin-readonly') && !user?.roles?.includes('admin') && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--pf-t--global--text--color--subtle)' }}>
+              {t('role.adminReadonly')}
             </div>
           )}
         </div>
       </DropdownItem>
       <Divider component="li" />
-      <DropdownItem key="settings">
-        <Link to="/settings" style={{ textDecoration: 'none', color: 'inherit' }}>
-          Settings
-        </Link>
-      </DropdownItem>
-      <DropdownItem key="logout" onClick={logout}>
-        {t('ui.actions.logout')}
-      </DropdownItem>
+      {userDropdownActions.map((item, index) => (
+        <DropdownItem
+          key={item.key}
+          onClick={item.action}
+          isFocused={index === userDropdownFocusedIndex}
+          tabIndex={index === userDropdownFocusedIndex ? 0 : -1}
+          role="menuitem"
+        >
+          {item.label}
+        </DropdownItem>
+      ))}
     </DropdownList>
   );
 
@@ -212,14 +381,34 @@ const Layout: React.FC = () => {
             <Dropdown
               isOpen={isLanguageDropdownOpen}
               onSelect={() => setIsLanguageDropdownOpen(false)}
-              onOpenChange={setIsLanguageDropdownOpen}
+              onOpenChange={(isOpen: boolean) => {
+                setIsLanguageDropdownOpen(isOpen);
+                if (!isOpen) {
+                  setLanguageDropdownFocusedIndex(-1);
+                }
+              }}
               popperProps={{ position: 'right' }}
               toggle={(toggleRef) => (
                 <MenuToggle
-                  ref={toggleRef}
+                  ref={(node) => {
+                    if (toggleRef && typeof toggleRef !== 'function') {
+                      (toggleRef as React.MutableRefObject<any>).current = node;
+                    }
+                    if (languageToggleRef.current !== node) {
+                      (languageToggleRef as React.MutableRefObject<any>).current = node;
+                    }
+                  }}
                   aria-label={t('ui.language.selector')}
+                  aria-expanded={isLanguageDropdownOpen}
+                  aria-haspopup="menu"
                   variant="plain"
                   onClick={() => setIsLanguageDropdownOpen(!isLanguageDropdownOpen)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsLanguageDropdownOpen(true);
+                    }
+                  }}
                   style={{
                     height: '40px',
                     width: '40px',
@@ -232,7 +421,7 @@ const Layout: React.FC = () => {
                 </MenuToggle>
               )}
             >
-              {languageDropdownItems}
+              {languageDropdownItemsJSX}
             </Dropdown>
           </ToolbarItem>
 
@@ -249,14 +438,34 @@ const Layout: React.FC = () => {
             <Dropdown
               isOpen={isUserDropdownOpen}
               onSelect={() => setIsUserDropdownOpen(false)}
-              onOpenChange={setIsUserDropdownOpen}
+              onOpenChange={(isOpen: boolean) => {
+                setIsUserDropdownOpen(isOpen);
+                if (!isOpen) {
+                  setUserDropdownFocusedIndex(-1);
+                }
+              }}
               popperProps={{ position: 'right' }}
               toggle={(toggleRef) => (
                 <MenuToggle
-                  ref={toggleRef}
+                  ref={(node) => {
+                    if (toggleRef && typeof toggleRef !== 'function') {
+                      (toggleRef as React.MutableRefObject<any>).current = node;
+                    }
+                    if (userToggleRef.current !== node) {
+                      (userToggleRef as React.MutableRefObject<any>).current = node;
+                    }
+                  }}
                   aria-label="User menu"
+                  aria-expanded={isUserDropdownOpen}
+                  aria-haspopup="menu"
                   variant="plain"
                   onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsUserDropdownOpen(true);
+                    }
+                  }}
                   style={{
                     height: '40px',
                     width: '40px',
@@ -270,7 +479,7 @@ const Layout: React.FC = () => {
                 </MenuToggle>
               )}
             >
-              {userDropdownItems}
+              {userDropdownItemsJSX}
             </Dropdown>
           </ToolbarItem>
         </ToolbarGroup>
@@ -285,7 +494,9 @@ const Layout: React.FC = () => {
           <Button
             variant="plain"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            aria-label="Global navigation"
+            aria-label={isSidebarOpen ? t('ui.actions.closeSidebar') : t('ui.actions.openSidebar')}
+            aria-expanded={isSidebarOpen}
+            aria-controls="main-navigation"
             style={{
               height: '40px',
               width: '40px',
@@ -317,8 +528,13 @@ const Layout: React.FC = () => {
         isFilled
         style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
       >
-        {PageNav}
-        <div style={{ marginTop: 'auto', padding: '1rem', textAlign: 'center' }}>
+        <nav role="navigation" aria-label="Main navigation">
+          {PageNav}
+        </nav>
+        <aside
+          role="complementary"
+          style={{ marginTop: 'auto', padding: '1rem', textAlign: 'center' }}
+        >
           <Content component={ContentVariants.small}>
             App by{' '}
             <a href="http://red.ht/cai-team" target="_blank" rel="noreferrer">
@@ -355,21 +571,37 @@ const Layout: React.FC = () => {
                 <Flex direction={{ default: 'row' }}>
                   <FlexItem style={{ alignmentBaseline: 'middle' }}>
                     {repoStars !== null && (
-                      <img
-                        src={isDarkTheme ? starLogoWhite : starLogo}
-                        alt="Star Logo"
-                        style={{ height: '15px', marginRight: '0.5rem', verticalAlign: 'text-top' }}
-                      />
+                      <>
+                        <img
+                          src={isDarkTheme ? starLogoWhite : starLogo}
+                          alt=""
+                          style={{
+                            height: '15px',
+                            marginRight: '0.5rem',
+                            verticalAlign: 'text-top',
+                          }}
+                          aria-hidden="true"
+                        />
+                        <span className="pf-v6-screen-reader">Stars: </span>
+                      </>
                     )}
                     {repoStars !== null ? `${repoStars}` : ''}
                   </FlexItem>
                   <FlexItem>
-                    {repoStars !== null && (
-                      <img
-                        src={isDarkTheme ? forkLogoWhite : forkLogo}
-                        alt="Fork Logo"
-                        style={{ height: '15px', marginRight: '0.5rem', verticalAlign: 'text-top' }}
-                      />
+                    {repoForks !== null && (
+                      <>
+                        <img
+                          src={isDarkTheme ? forkLogoWhite : forkLogo}
+                          alt=""
+                          style={{
+                            height: '15px',
+                            marginRight: '0.5rem',
+                            verticalAlign: 'text-top',
+                          }}
+                          aria-hidden="true"
+                        />
+                        <span className="pf-v6-screen-reader">Forks: </span>
+                      </>
                     )}
                     {repoForks !== null ? `${repoForks}` : ''}
                   </FlexItem>
@@ -377,19 +609,31 @@ const Layout: React.FC = () => {
               </FlexItem>
             </Flex>
           </Content>
-        </div>
+        </aside>
       </PageSidebarBody>
     </PageSidebar>
   );
 
   const mainContent = (
     <Page masthead={Header} sidebar={isSidebarOpen ? Sidebar : undefined}>
-      <Outlet />
+      <main id="main-content" role="main">
+        <Outlet />
+      </main>
     </Page>
   );
 
   return (
-    <>
+    <BannerProvider>
+      {/* Skip Navigation Links */}
+      <div>
+        <a href="#main-content" className="skip-link">
+          {t('ui.accessibility.skipToMain', 'Skip to main content')}
+        </a>
+        <a href="#main-navigation" className="skip-link">
+          {t('ui.accessibility.skipToNavigation', 'Skip to navigation')}
+        </a>
+      </div>
+
       <AlertToastGroup notifications={toastNotifications} onRemove={removeToastNotification} />
       <Drawer
         isExpanded={isNotificationDrawerOpen}
@@ -410,10 +654,13 @@ const Layout: React.FC = () => {
             </DrawerPanelContent>
           }
         >
-          <DrawerContentBody>{mainContent}</DrawerContentBody>
+          <DrawerContentBody>
+            <BannerAnnouncement />
+            {mainContent}
+          </DrawerContentBody>
         </DrawerContent>
       </Drawer>
-    </>
+    </BannerProvider>
   );
 };
 

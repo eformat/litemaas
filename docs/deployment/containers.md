@@ -15,7 +15,7 @@ The LiteMaaS application consists of four main containers:
 
 LiteMaaS containers can be deployed in multiple ways:
 
-- **[OpenShift/Kubernetes](#openshift-kubernetes-deployment)** - Enterprise container orchestration (recommended for production)
+- **[OpenShift/Kubernetes](#openshiftkubernetes-deployment)** - Enterprise container orchestration (recommended for production)
 - **[Docker/Podman Compose](#dockerpodman-compose-deployment)** - Local development and small deployments
 - **[Manual Container Deployment](#manual-container-deployment)** - Individual container management
 
@@ -27,15 +27,77 @@ Both the backend and frontend use optimized three-stage builds that share a comm
 
 - Podman, Docker, or compatible container engine
 - Access to Red Hat UBI9 registry (`registry.access.redhat.com`)
+- Node.js (for version extraction from package.json)
 
-### Build Commands
+### Automated Build Script
+
+LiteMaaS includes an automated build script that handles both backend and frontend container builds with centralized versioning:
+
+> **📦 Custom Registry Configuration**: Before building for production, configure your container registry by editing the `REGISTRY` variable in `scripts/build-containers.sh`:
+>
+> ```bash
+> # Edit this line in scripts/build-containers.sh:
+> REGISTRY="quay.io/rh-aiservices-bu"  # Default
+>
+> # Examples for other registries:
+> REGISTRY="ghcr.io/your-org"                    # GitHub Container Registry
+> REGISTRY="your-company.com/litemaas"           # Private registry
+> REGISTRY="docker.io/your-username"             # Docker Hub
+> ```
 
 ```bash
-# Build backend container (launch from the root of the project)
-podman build -f backend/Containerfile -t litemaas-backend:0.0.1 .
+# Build both images (uses version from root package.json)
+npm run build:containers
 
-# Build frontend container (no build arguments needed - fully environment-agnostic)
-podman build -f frontend/Containerfile -t litemaas-frontend:latest .
+# Build and push to configured registry
+npm run build:containers:push
+
+# Push existing images only
+npm run push:containers
+```
+
+**Key Features:**
+
+- 🏷️ **Centralized versioning** - Automatically uses version from root `package.json`
+- 🐳 **Runtime detection** - Automatically detects and uses Docker or Podman
+- 🏗️ **Flexible options** - Support for different platforms, local builds, and cache control
+- ✅ **Validation** - Checks for image existence before push-only operations
+- 🔧 **Registry flexibility** - Easy configuration for any container registry
+
+### Manual Build Commands
+
+If you prefer manual control or need to customize the build process:
+
+```bash
+# Extract version from root package.json
+VERSION=$(node -p "require('./package.json').version")
+
+# Build backend container (launch from the root of the project)
+podman build -f backend/Containerfile -t quay.io/rh-aiservices-bu/litemaas-backend:$VERSION .
+
+# Build frontend container (fully environment-agnostic)
+podman build -f frontend/Containerfile -t quay.io/rh-aiservices-bu/litemaas-frontend:$VERSION .
+```
+
+### Script Options
+
+The build script supports various options for different deployment scenarios:
+
+```bash
+# Build without using cache
+./scripts/build-containers.sh --no-cache
+
+# Build for specific platform (useful for ARM64)
+./scripts/build-containers.sh --platform linux/arm64
+
+# Build with local tags only (no registry prefix)
+./scripts/build-containers.sh --local
+
+# Push existing images to registry (validates existence first)
+./scripts/build-containers.sh --push
+
+# Build and then push to registry
+./scripts/build-containers.sh --build-and-push
 ```
 
 ## Docker/Podman Compose Deployment
@@ -51,6 +113,7 @@ docker-compose up -d
 ```
 
 This will start:
+
 - PostgreSQL database on port 5432
 - Backend API on port 8080
 - Frontend web app on port 3000
@@ -60,29 +123,29 @@ This will start:
 
 ### Backend Environment Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `DATABASE_URL` | PostgreSQL connection string | - | Yes |
-| `JWT_SECRET` | JWT signing secret | - | Yes |
-| `OAUTH_CLIENT_ID` | OAuth client ID | - | Yes |
-| `OAUTH_CLIENT_SECRET` | OAuth client secret | - | Yes |
-| `OAUTH_ISSUER` | OAuth provider URL | - | Yes |
-| `OAUTH_CALLBACK_URL` | OAuth callback URL | - | Yes |
-| `ADMIN_API_KEYS` | Comma-separated admin keys | - | Yes |
-| `LITELLM_API_URL` | LiteLLM service URL | - | Yes |
-| `HOST` | Server bind address | `0.0.0.0` | No |
-| `PORT` | Server port | `8080` | No |
-| `NODE_ENV` | Environment mode | `production` | No |
-| `LOG_LEVEL` | Logging level | `info` | No |
-| `CORS_ORIGIN` | CORS allowed origins | - | No |
+| Variable              | Description                  | Default      | Required |
+| --------------------- | ---------------------------- | ------------ | -------- |
+| `DATABASE_URL`        | PostgreSQL connection string | -            | Yes      |
+| `JWT_SECRET`          | JWT signing secret           | -            | Yes      |
+| `OAUTH_CLIENT_ID`     | OAuth client ID              | -            | Yes      |
+| `OAUTH_CLIENT_SECRET` | OAuth client secret          | -            | Yes      |
+| `OAUTH_ISSUER`        | OAuth provider URL           | -            | Yes      |
+| `OAUTH_CALLBACK_URL`  | OAuth callback URL           | -            | Yes      |
+| `ADMIN_API_KEYS`      | Comma-separated admin keys   | -            | Yes      |
+| `LITELLM_API_URL`     | LiteLLM service URL          | -            | Yes      |
+| `HOST`                | Server bind address          | `0.0.0.0`    | No       |
+| `PORT`                | Server port                  | `8080`       | No       |
+| `NODE_ENV`            | Environment mode             | `production` | No       |
+| `LOG_LEVEL`           | Logging level                | `info`       | No       |
+| `CORS_ORIGIN`         | CORS allowed origins         | -            | No       |
 
 ### Frontend Runtime Configuration
 
 The frontend container is now fully environment-agnostic and configured at **runtime**:
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `BACKEND_URL` | Backend API URL for proxying `/api` requests | `http://backend:8080` | No |
+| Variable      | Description                                  | Default               | Required |
+| ------------- | -------------------------------------------- | --------------------- | -------- |
+| `BACKEND_URL` | Backend API URL for proxying `/api` requests | `http://backend:8080` | No       |
 
 **Note**: No build-time configuration is needed. The container image can be built once and deployed to any environment by setting the `BACKEND_URL` environment variable at runtime.
 
@@ -143,8 +206,8 @@ LiteMaaS includes comprehensive Kubernetes manifests and Kustomize configuration
 oc apply -k deployment/openshift/
 
 # Access applications at:
-# - LiteMaaS: https://litemaas-<namespace>.apps.<cluster-domain>
-# - LiteLLM UI: https://litellm-<namespace>.apps.<cluster-domain>
+# - LiteMaaS: https://litemaas-<namespace>.<cluster-domain>
+# - LiteLLM UI: https://litellm-<namespace>.<cluster-domain>
 ```
 
 ### Features Included
@@ -160,6 +223,7 @@ oc apply -k deployment/openshift/
 ### Complete Setup Guide
 
 For detailed OpenShift deployment instructions including:
+
 - OAuth client configuration
 - Secret preparation
 - Step-by-step deployment process
@@ -179,11 +243,13 @@ Both containers include built-in health checks:
 Both containers use an optimized three-stage build approach:
 
 ### Backend Build Stages:
+
 1. **Base stage**: UBI9 Node.js with updated system packages
 2. **Builder stage**: Inherits from base, installs dev dependencies, builds application
 3. **Runtime stage**: Inherits from base, installs only production dependencies, copies built artifacts
 
 ### Frontend Build Stages:
+
 1. **Base stage**: UBI9 Node.js with updated system packages (for building)
 2. **Builder stage**: Inherits from base, builds React application without any environment-specific configuration
 3. **Runtime stage**: UBI9 nginx with envsubst for runtime configuration, serves the built static files
@@ -243,21 +309,73 @@ podman logs litemaas-postgres
 ### Development vs Production
 
 - **Development**: Use the existing `dev-tools/compose.yaml` for local development
-- **Production**: Use the root `compose.yaml` or deploy containers individually
+- **Production**: Use the deployment instructions
 - **Testing**: Both containers support health checks for automated testing
 
 ## Image Registry
 
-For production deployments, push images to a container registry:
+### Automated Registry Push
+
+For production deployments, the build script can automatically push to the configured registry:
 
 ```bash
+# Build and push to quay.io/rh-aiservices-bu (default registry)
+npm run build:containers:push
+
+# Or manually with the script
+./scripts/build-containers.sh --build-and-push
+```
+
+The script automatically tags images with:
+
+- Version from root `package.json` (e.g., `quay.io/rh-aiservices-bu/litemaas-backend:1.0.0`)
+- Latest tag (e.g., `quay.io/rh-aiservices-bu/litemaas-backend:latest`)
+
+### Manual Registry Operations
+
+If you need manual control over registry operations:
+
+```bash
+# Extract version for consistency
+VERSION=$(node -p "require('./package.json').version")
+
 # Tag for registry
-podman tag litemaas-backend:latest registry.example.com/litemaas/backend:v1.0.0
-podman tag litemaas-frontend:latest registry.example.com/litemaas/frontend:v1.0.0
+podman tag litemaas-backend:$VERSION registry.example.com/litemaas/backend:$VERSION
+podman tag litemaas-frontend:$VERSION registry.example.com/litemaas/frontend:$VERSION
 
 # Push to registry
-podman push registry.example.com/litemaas/backend:v1.0.0
-podman push registry.example.com/litemaas/frontend:v1.0.0
+podman push registry.example.com/litemaas/backend:$VERSION
+podman push registry.example.com/litemaas/frontend:$VERSION
+```
+
+### Registry Configuration
+
+> **⚠️ Important**: Always configure your registry BEFORE building and pushing images.
+
+To use a different registry, edit the `REGISTRY` variable in `scripts/build-containers.sh`:
+
+```bash
+# Default registry (line ~20 in scripts/build-containers.sh)
+REGISTRY="quay.io/rh-aiservices-bu"
+
+# Examples for common registries:
+REGISTRY="ghcr.io/your-org"                    # GitHub Container Registry
+REGISTRY="your-company.com/your-org"           # Private/corporate registry
+REGISTRY="docker.io/your-username"             # Docker Hub
+REGISTRY="registry.example.com/your-org"       # Custom registry
+```
+
+**Authentication**: Ensure you're logged into your registry before pushing:
+
+```bash
+# Docker Hub
+docker login
+
+# GitHub Container Registry
+docker login ghcr.io -u YOUR_USERNAME
+
+# Custom registry
+docker login your-registry.com
 ```
 
 ## OAuth Flow in Containerized Environments
@@ -274,13 +392,13 @@ graph TB
         Browser[Browser]
         OAuth[OpenShift OAuth Provider]
     end
-    
+
     subgraph "Container Stack"
         NGINX[NGINX<br/>Port 8080]
         Backend[Backend API<br/>Port 8081]
         Frontend[Frontend SPA<br/>Static Files]
     end
-    
+
     Browser -->|All requests| NGINX
     NGINX -->|/api/*| Backend
     NGINX -->|/*| Frontend
@@ -296,7 +414,7 @@ sequenceDiagram
     participant NGINX
     participant Backend
     participant OAuth Provider
-    
+
     Note over User,OAuth Provider: 1. Login Initiation
     User->>Browser: Click "Login"
     Browser->>NGINX: POST /api/auth/login
@@ -304,11 +422,11 @@ sequenceDiagram
     Backend->>NGINX: Return OAuth URL
     NGINX->>Browser: Return OAuth URL
     Browser->>OAuth Provider: Redirect to OAuth
-    
+
     Note over User,OAuth Provider: 2. OAuth Authentication
     User->>OAuth Provider: Enter credentials
     OAuth Provider->>Browser: Redirect to callback
-    
+
     Note over Browser,Backend: 3. OAuth Callback Processing
     Browser->>NGINX: GET /api/auth/callback?code=xxx
     Note right of Browser: OAuth provider redirects here
@@ -316,7 +434,7 @@ sequenceDiagram
     Backend->>OAuth Provider: Exchange code for token
     OAuth Provider->>Backend: Return access token
     Backend->>Backend: Create/update user
-    
+
     Note over Backend,Browser: 4. Frontend Redirect
     Backend->>NGINX: 302 Redirect to /auth/callback
     Note right of Backend: Relative redirect works<br/>in any environment
@@ -342,12 +460,12 @@ As of the latest update, LiteMaaS implements **automatic OAuth callback URL dete
 
 Register ALL possible callback URLs with your OAuth provider:
 
-| Environment | Callback URLs to Register | Notes |
-|-------------|--------------------------|--------|
-| Development (Vite) | `http://localhost:3000/api/auth/callback` | Vite dev server on port 3000 |
-| Development (Direct) | `http://localhost:8080/api/auth/callback`<br>`http://localhost:8081/api/auth/callback` | Direct backend access |
-| Container (NGINX) | `http://localhost:8080/api/auth/callback` | NGINX on port 8080 |
-| Production | `https://your-domain.com/api/auth/callback` | Through ingress/load balancer |
+| Environment          | Callback URLs to Register                                                              | Notes                         |
+| -------------------- | -------------------------------------------------------------------------------------- | ----------------------------- |
+| Development (Vite)   | `http://localhost:3000/api/auth/callback`                                              | Vite dev server on port 3000  |
+| Development (Direct) | `http://localhost:8081/api/auth/callback`<br>`http://localhost:8081/api/auth/callback` | Direct backend access         |
+| Container (NGINX)    | `http://localhost:8081/api/auth/callback`                                              | NGINX on port 8080            |
+| Production           | `https://your-domain.com/api/auth/callback`                                            | Through ingress/load balancer |
 
 ##### Example OAuth Provider Configuration
 
@@ -359,10 +477,10 @@ metadata:
   name: litemaas
 secret: your-secret-here
 redirectURIs:
-  - http://localhost:3000/api/auth/callback    # Vite development
-  - http://localhost:8080/api/auth/callback    # Container/Direct
-  - http://localhost:8081/api/auth/callback    # Backend direct
-  - https://your-domain.com/api/auth/callback  # Production
+  - http://localhost:3000/api/auth/callback # Vite development
+  - http://localhost:8081/api/auth/callback # Container/Direct
+  - http://localhost:8081/api/auth/callback # Backend direct
+  - https://your-domain.com/api/auth/callback # Production
 grantMethod: prompt
 ```
 
@@ -395,10 +513,11 @@ The backend uses relative redirects to ensure environment portability:
 ```typescript
 // After OAuth callback processing
 const callbackPath = `/auth/callback#token=${token}&expires_in=${expiresIn}`;
-return reply.redirect(callbackPath);  // Relative redirect
+return reply.redirect(callbackPath); // Relative redirect
 ```
 
 This means:
+
 - No `FRONTEND_URL` configuration needed
 - Works regardless of domain or port
 - Browser maintains the current origin
@@ -411,7 +530,8 @@ This means:
 
 **Cause**: The `redirect_uri` parameter doesn't match between authorization and token exchange
 
-**Solution**: 
+**Solution**:
+
 1. Register all possible callback URLs with your OAuth provider
 2. The automatic detection ensures the same URL is used in both phases
 3. Check backend logs for "Token exchange callback URL" to see what's being used
@@ -422,7 +542,8 @@ This means:
 
 **Cause**: Mismatch between where frontend is served and OAuth callback configuration
 
-**Solution**: 
+**Solution**:
+
 1. The backend now uses relative redirects (`/auth/callback`)
 2. Automatic callback URL detection handles port differences
 3. Ensure all possible URLs are registered with OAuth provider
@@ -433,7 +554,8 @@ This means:
 
 **Cause**: Hard-coded callback URLs don't match the deployment environment
 
-**Solution**: 
+**Solution**:
+
 1. Register multiple callback URLs with your OAuth provider
 2. Automatic detection selects the right one based on request origin
 3. No need to change configuration between environments
@@ -444,7 +566,8 @@ This means:
 
 **Cause**: Wrong OAuth callback URL configuration or NGINX proxy issue
 
-**Solution**: 
+**Solution**:
+
 1. Verify OAuth callback URL includes `/api/auth/callback`
 2. Ensure NGINX is properly proxying `/api/*` to backend
 3. Check backend is running and healthy
@@ -462,14 +585,15 @@ This means:
 To test OAuth in containerized environment:
 
 1. **Start containers with proper configuration:**
+
 ```bash
 # Backend with OAuth config
 podman run -d --name backend \
   -e OAUTH_CLIENT_ID=your-client \
   -e OAUTH_CLIENT_SECRET=your-secret \
   -e OAUTH_ISSUER=https://oauth.provider \
-  -e OAUTH_CALLBACK_URL=http://localhost:8080/api/auth/callback \
-  -e CORS_ORIGIN=http://localhost:8080 \
+  -e OAUTH_CALLBACK_URL=http://localhost:8081/api/auth/callback \
+  -e CORS_ORIGIN=http://localhost:8081 \
   -e LOG_LEVEL=debug \
   -p 8081:8080 \
   litemaas-backend
@@ -484,10 +608,10 @@ podman run -d --name frontend \
 ```
 
 2. **Verify OAuth flow:**
-   - Navigate to `http://localhost:8080`
+   - Navigate to `http://localhost:8081`
    - Click login
    - Should redirect to OAuth provider
-   - After login, should return to `http://localhost:8080/home`
+   - After login, should return to `http://localhost:8081/home`
 
 ### Security Considerations
 
@@ -495,4 +619,4 @@ podman run -d --name frontend \
 2. **Validate OAuth state parameter** to prevent CSRF attacks
 3. **Use secure token storage** in frontend (httpOnly cookies or secure localStorage)
 4. **Implement proper CORS policies** to prevent unauthorized access
-5. **Regular token rotation** and expiration handling 
+5. **Regular token rotation** and expiration handling

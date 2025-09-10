@@ -8,7 +8,7 @@ import {
 } from '../types';
 import { LiteLLMModel } from '../types/model.types';
 import { LiteLLMService } from '../services/litellm.service';
-import { ModelSyncService, ModelSyncOptions } from '../services/model-sync.service';
+import { ModelSyncService } from '../services/model-sync.service';
 
 const modelsRoutes: FastifyPluginAsync = async (fastify) => {
   // Initialize services
@@ -68,6 +68,19 @@ const modelsRoutes: FastifyPluginAsync = async (fastify) => {
       };
     }
 
+    // Add admin fields from LiteLLM
+    result.apiBase = model.litellm_params.api_base;
+    result.inputCostPerToken = inputCost;
+    result.outputCostPerToken = outputCost;
+    result.tpm = model.litellm_params.tpm;
+    result.rpm = model.litellm_params.rpm;
+    result.maxTokens = model.model_info.max_tokens;
+    result.supportsVision = model.model_info.supports_vision || false;
+    result.supportsFunctionCalling = model.model_info.supports_function_calling || false;
+    result.supportsParallelFunctionCalling =
+      model.model_info.supports_parallel_function_calling || false;
+    result.supportsToolChoice = model.model_info.supports_tool_choice || false;
+
     return result;
   };
 
@@ -84,6 +97,7 @@ const modelsRoutes: FastifyPluginAsync = async (fastify) => {
         supportsFunctionCalling: model.model_info.supports_function_calling,
         supportsParallelFunctionCalling: model.model_info.supports_parallel_function_calling,
         supportsVision: model.model_info.supports_vision,
+        supportsToolChoice: model.model_info.supports_tool_choice,
         supportsAssistantApi: model.model_info.supports_assistant_api,
         accessGroups: model.model_info.access_groups,
         accessViaTeamIds: model.model_info.access_via_team_ids,
@@ -132,6 +146,21 @@ const modelsRoutes: FastifyPluginAsync = async (fastify) => {
                       unit: { type: 'string' },
                     },
                   },
+                  isActive: { type: 'boolean' },
+                  createdAt: { type: 'string' },
+                  updatedAt: { type: 'string' },
+                  // Admin fields
+                  apiBase: { type: 'string' },
+                  backendModelName: { type: 'string' },
+                  inputCostPerToken: { type: 'number' },
+                  outputCostPerToken: { type: 'number' },
+                  tpm: { type: 'number' },
+                  rpm: { type: 'number' },
+                  maxTokens: { type: 'number' },
+                  supportsVision: { type: 'boolean' },
+                  supportsFunctionCalling: { type: 'boolean' },
+                  supportsParallelFunctionCalling: { type: 'boolean' },
+                  supportsToolChoice: { type: 'boolean' },
                 },
               },
             },
@@ -168,7 +197,7 @@ const modelsRoutes: FastifyPluginAsync = async (fastify) => {
               id: String(model.id),
               name: String(model.name),
               provider: String(model.provider),
-              description: String(model.description),
+              description: model.description ? String(model.description) : '',
               capabilities: (model.features as string[]) || [],
               contextLength: Number(model.context_length),
               pricing:
@@ -182,6 +211,24 @@ const modelsRoutes: FastifyPluginAsync = async (fastify) => {
               isActive: model.availability === 'available',
               createdAt: new Date(String(model.created_at)),
               updatedAt: new Date(String(model.updated_at)),
+              // Admin fields
+              apiBase: model.api_base ? String(model.api_base) : undefined,
+              backendModelName: model.backend_model_name
+                ? String(model.backend_model_name)
+                : undefined,
+              inputCostPerToken: model.input_cost_per_token
+                ? Number(model.input_cost_per_token)
+                : undefined,
+              outputCostPerToken: model.output_cost_per_token
+                ? Number(model.output_cost_per_token)
+                : undefined,
+              tpm: model.tpm ? Number(model.tpm) : undefined,
+              rpm: model.rpm ? Number(model.rpm) : undefined,
+              maxTokens: model.max_tokens ? Number(model.max_tokens) : undefined,
+              supportsVision: Boolean(model.supports_vision),
+              supportsFunctionCalling: Boolean(model.supports_function_calling),
+              supportsParallelFunctionCalling: Boolean(model.supports_parallel_function_calling),
+              supportsToolChoice: Boolean(model.supports_tool_choice),
             }));
 
             fastify.log.debug({ count: models.length }, 'Using synchronized models from database');
@@ -191,9 +238,91 @@ const modelsRoutes: FastifyPluginAsync = async (fastify) => {
         } catch (dbError) {
           fastify.log.debug(dbError, 'Database models unavailable, fetching from LiteLLM');
 
-          // Fallback to direct LiteLLM fetch
-          const liteLLMModels = await liteLLMService.getModels();
-          models = liteLLMModels.map(convertLiteLLMModel);
+          try {
+            // Fallback to direct LiteLLM fetch
+            const liteLLMModels = await liteLLMService.getModels();
+            models = liteLLMModels.map(convertLiteLLMModel);
+          } catch (liteLLMError) {
+            // In development mode only, fall back to mock data when both DB and LiteLLM are unavailable
+            if (process.env.NODE_ENV === 'development') {
+              fastify.log.warn(
+                { dbError, liteLLMError },
+                'Both database and LiteLLM unavailable in development mode, using mock models',
+              );
+
+              // Define mock LiteLLM models for development fallback
+              const mockLiteLLMModels: LiteLLMModel[] = [
+                {
+                  model_name: 'gpt-4o',
+                  litellm_params: {
+                    input_cost_per_token: 0.01,
+                    output_cost_per_token: 0.03,
+                    custom_llm_provider: 'openai',
+                    model: 'openai/gpt-4o',
+                  },
+                  model_info: {
+                    id: 'mock-gpt-4o-id',
+                    db_model: true,
+                    max_tokens: 128000,
+                    supports_function_calling: true,
+                    supports_parallel_function_calling: true,
+                    supports_vision: true,
+                    direct_access: true,
+                    access_via_team_ids: [],
+                    input_cost_per_token: 0.01,
+                    output_cost_per_token: 0.03,
+                  },
+                },
+                {
+                  model_name: 'gpt-4o-mini',
+                  litellm_params: {
+                    input_cost_per_token: 0.00015,
+                    output_cost_per_token: 0.0006,
+                    custom_llm_provider: 'openai',
+                    model: 'openai/gpt-4o-mini',
+                  },
+                  model_info: {
+                    id: 'mock-gpt-4o-mini-id',
+                    db_model: true,
+                    max_tokens: 128000,
+                    supports_function_calling: true,
+                    supports_parallel_function_calling: true,
+                    supports_vision: true,
+                    direct_access: true,
+                    access_via_team_ids: [],
+                    input_cost_per_token: 0.00015,
+                    output_cost_per_token: 0.0006,
+                  },
+                },
+                {
+                  model_name: 'claude-3-5-sonnet-20241022',
+                  litellm_params: {
+                    input_cost_per_token: 0.003,
+                    output_cost_per_token: 0.015,
+                    custom_llm_provider: 'anthropic',
+                    model: 'anthropic/claude-3-5-sonnet-20241022',
+                  },
+                  model_info: {
+                    id: 'mock-claude-3-5-sonnet-id',
+                    db_model: true,
+                    max_tokens: 200000,
+                    supports_function_calling: true,
+                    supports_parallel_function_calling: false,
+                    supports_vision: true,
+                    direct_access: true,
+                    access_via_team_ids: [],
+                    input_cost_per_token: 0.003,
+                    output_cost_per_token: 0.015,
+                  },
+                },
+              ];
+
+              models = mockLiteLLMModels.map(convertLiteLLMModel);
+            } else {
+              // In production, propagate the error
+              throw liteLLMError;
+            }
+          }
         }
 
         // Apply filters
@@ -579,80 +708,31 @@ const modelsRoutes: FastifyPluginAsync = async (fastify) => {
     },
     preHandler: [fastify.authenticate, fastify.requirePermission('models:write')],
     handler: async (request, reply) => {
-      const user = (request as AuthenticatedRequest).user;
-      const { forceUpdate = false, markUnavailable = true } = request.body as ModelSyncOptions;
-
       try {
-        fastify.log.info({ userId: user.userId }, 'Starting model synchronization');
+        // Use the unified ModelSyncService
+        const modelSyncService = new ModelSyncService(fastify);
 
+        const body = request.body as { forceUpdate?: boolean; markUnavailable?: boolean };
         const result = await modelSyncService.syncModels({
-          forceUpdate,
-          markUnavailable,
+          forceUpdate: body?.forceUpdate || false,
+          markUnavailable: body?.markUnavailable !== false,
         });
 
-        // Create audit log
-        await fastify.dbUtils.query(
-          `INSERT INTO audit_logs (user_id, action, resource_type, metadata, success)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [
-            user.userId,
-            'MODELS_SYNC',
-            'MODEL',
-            JSON.stringify({
-              forceUpdate,
-              markUnavailable,
-              result: {
-                totalModels: result.totalModels,
-                newModels: result.newModels,
-                updatedModels: result.updatedModels,
-                unavailableModels: result.unavailableModels,
-                errors: result.errors.length,
-              },
-            }),
-            result.success,
-          ],
-        );
-
-        if (!result.success && result.errors.length > 0) {
-          return reply.status(500).send({
-            error: {
-              code: 'SYNC_FAILED',
-              message: `Model synchronization failed: ${result.errors.join(', ')}`,
-            },
-          });
-        }
-
-        fastify.log.info(
-          {
-            userId: user.userId,
-            result,
-          },
-          'Model synchronization completed',
-        );
-
-        return result;
+        // Return the full result to frontend
+        return reply.send(result);
       } catch (error) {
-        fastify.log.error(error, 'Model sync endpoint failed');
+        request.log.error({ error }, 'Manual model sync failed');
 
-        // Create audit log for failure
-        await fastify.dbUtils.query(
-          `INSERT INTO audit_logs (user_id, action, resource_type, metadata, success, error_message)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            user.userId,
-            'MODELS_SYNC',
-            'MODEL',
-            JSON.stringify({ forceUpdate, markUnavailable }),
-            false,
-            (error as Error).message,
-          ],
-        );
-
-        return reply.status(500).send({
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'Failed to synchronize models',
-          },
+        // Return error with details
+        const errorMessage = error instanceof Error ? error.message : 'Sync failed';
+        return reply.code(500).send({
+          success: false,
+          totalModels: 0,
+          newModels: 0,
+          updatedModels: 0,
+          unavailableModels: 0,
+          errors: [errorMessage],
+          syncedAt: new Date().toISOString(),
         });
       }
     },

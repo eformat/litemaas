@@ -6,7 +6,7 @@ const envSchema = Type.Object({
   // Server
   NODE_ENV: Type.String({ default: 'development' }),
   HOST: Type.String({ default: '0.0.0.0' }),
-  PORT: Type.String({ default: '8080' }),
+  PORT: Type.String({ default: '8081' }),
   LOG_LEVEL: Type.String({ default: 'info' }),
 
   // CORS
@@ -26,7 +26,7 @@ const envSchema = Type.Object({
   OAUTH_CLIENT_ID: Type.String(),
   OAUTH_CLIENT_SECRET: Type.String(),
   OAUTH_ISSUER: Type.String(),
-  OAUTH_CALLBACK_URL: Type.String({ default: 'http://localhost:8080/api/auth/callback' }),
+  OAUTH_CALLBACK_URL: Type.String({ default: 'http://localhost:8081/api/auth/callback' }),
 
   // LiteLLM
   LITELLM_API_URL: Type.String({ default: 'http://localhost:4000' }),
@@ -38,6 +38,11 @@ const envSchema = Type.Object({
   // Rate Limiting
   RATE_LIMIT_MAX: Type.String({ default: '100' }),
   RATE_LIMIT_TIME_WINDOW: Type.String({ default: '1m' }),
+
+  // Default User Values
+  DEFAULT_USER_MAX_BUDGET: Type.String({ default: '100' }),
+  DEFAULT_USER_TPM_LIMIT: Type.String({ default: '100000' }),
+  DEFAULT_USER_RPM_LIMIT: Type.String({ default: '120' }),
 });
 
 const envPlugin: FastifyPluginAsync = async (fastify) => {

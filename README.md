@@ -1,12 +1,17 @@
-# LiteMaaS - AI Model Subscription Platform
+<!-- markdownlint-disable-next-line MD033 MD041 -->
+<div align="center"> <!-- markdownlint-disable-next-line MD033 -->
+<img alt="Octobean logo" width="150" height="150" src="./img/octobean.svg">
+</div>
 
-**LiteMaaS** is an enterprise-grade platform for managing AI model subscriptions, API keys, and usage tracking. It seamlessly integrates with LiteLLM to provide a unified interface for accessing multiple AI models with comprehensive budget management and team collaboration features.
+# LiteMaaS - Models as a Service Platform
+
+**LiteMaaS** is a proof-of-concept application for managing LLM subscriptions, API keys, and usage tracking. It seamlessly integrates with LiteLLM to provide a unified interface for accessing multiple LLMs with comprehensive budget management and team collaboration features.
 
 ## 🎟️ Key Benefits
 
 - **Self-Service**: Users can independently manage subscriptions and API keys
-- **Multi-Model Access**: One API key can access multiple AI models
-- **Budget Control**: Set spending limits at user, team, and API key levels (upcoming feature)
+- **Multi-Model Access**: One API key can access multiple models
+- **Budget Control**: Set spending limits at user, team, and API key levels
 - **Usage Analytics**: Real-time tracking of token usage and costs
 - **Team Collaboration**: Share budgets and manage access across teams (upcoming feature)
 - **Enterprise Security**: OAuth2 authentication with OpenShift support
@@ -71,24 +76,24 @@ graph TB
     subgraph "Frontend"
         UI[React + PatternFly 6]
     end
-    
+
     subgraph "Backend Services"
         API[Fastify API Server]
         Auth[OAuth2/JWT Auth]
         DB[(PostgreSQL)]
     end
-    
+
     subgraph "External Services"
         LiteLLM[LiteLLM Gateway]
         OAuth[OpenShift OAuth]
     end
-    
+
     UI <--> API
     API <--> Auth
     API <--> DB
     API <--> LiteLLM
     Auth <--> OAuth
-    
+
     style UI fill:#e3f2fd
     style API fill:#fff3e0
     style LiteLLM fill:#f3e5f5
@@ -99,7 +104,7 @@ graph TB
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/your-org/litemaas.git
+   git clone https://github.com/rh-aiservices-bu/litemaas.git
    cd litemaas
    ```
 
@@ -134,7 +139,7 @@ graph TB
 - [Configuration Guide](docs/deployment/configuration.md)
 - [Development Guide](docs/development/setup.md)
 - [Production Deployment](docs/deployment/production-guide.md)
-- [UI Guidelines (PatternFly 6)](docs/development/ui-guidelines.md)
+- [UI Guidelines (PatternFly 6)](docs/development/pf6-guide/README.md)
 
 ### Quick Links
 
@@ -174,8 +179,8 @@ Deploy to OpenShift or Kubernetes using the provided manifests and Kustomize con
 oc apply -k deployment/openshift/
 
 # Access at:
-# - LiteMaaS: https://litemaas-<namespace>.apps.<cluster-domain>
-# - LiteLLM UI: https://litellm-<namespace>.apps.<cluster-domain>
+# - LiteMaaS: https://litemaas-<namespace>.<cluster-domain>
+# - LiteLLM UI: https://litellm-<namespace>.<cluster-domain>
 ```
 
 **📚 Complete Guide**: [OpenShift Deployment Guide](docs/deployment/openshift-deployment.md)
@@ -209,6 +214,49 @@ npm run build
 # - Frontend: frontend/dist/
 ```
 
+### Container Image Build
+
+Build container images for deployment using the automated build script:
+
+> **📦 Custom Registry**: To use a different container registry, edit the `REGISTRY` variable in `scripts/build-containers.sh` before building:
+>
+> ```bash
+> # Change this line in scripts/build-containers.sh:
+> REGISTRY="your-registry.com/your-org"
+> ```
+
+```bash
+# Build both backend and frontend container images
+npm run build:containers
+
+# Build and push to registry (default: quay.io/rh-aiservices-bu)
+npm run build:containers:push
+
+# Push existing images to registry
+npm run push:containers
+```
+
+**Features:**
+
+- 🏷️ **Centralized versioning** - Uses version from root package.json
+- 🐳 **Multi-runtime support** - Works with Docker or Podman
+- 🚀 **Flexible workflow** - Separate build and push operations
+- 🏗️ **Platform support** - Build for different architectures
+- 🔧 **Registry flexibility** - Easy to configure for any container registry
+
+**Script options:**
+
+```bash
+# Build without cache
+./scripts/build-containers.sh --no-cache
+
+# Build for ARM64
+./scripts/build-containers.sh --platform linux/arm64
+
+# Build with local tags only (no registry prefix)
+./scripts/build-containers.sh --local
+```
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on:
@@ -230,7 +278,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 💬 Getting Help
 
 - 📖 [Documentation](docs/) - Comprehensive guides and references
-- 🐛 [Issue Tracker](https://github.com/your-org/litemaas/issues) - Report bugs or request features
+- 🐛 [Issue Tracker](https://github.com/rh-aiservices-bu/litemaas/issues) - Report bugs or request features
 - 🤝 [Contributing](CONTRIBUTING.md) - Join the development community
 
 ---
